@@ -101,12 +101,6 @@ function VisualizationPage() {
     setup();
   }, [pantsCase]);
   // Toggle checkbox state
-  const update = (id: number, checked: boolean) => {
-    setCheckState(prev => ({
-      ...prev,
-      [id]: checked
-    }));
-  };
 
   
 
@@ -353,7 +347,6 @@ function VisualizationPage() {
           setCheckState={setCheckState}
           checkBoxData={checkBoxData}
           checkState={checkState}
-          update={update}
           sessionId={sessionKey}
           clabelId={pantsCase}
           setShowTaskDetails={setShowTaskDetails}
