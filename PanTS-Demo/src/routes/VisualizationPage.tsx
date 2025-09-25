@@ -49,7 +49,7 @@ function VisualizationPage() {
   const [showTaskDetails, setShowTaskDetails] = useState(true);
   const [showOrganDetails, setShowOrganDetails] = useState(false);  
   // const [loading, setLoading] = useState(true);
-  const [labelColorMap, setLabelColorMap] = useState<{ [key: number]: Color }>(segmentation_category_colors);
+  const [labelColorMap, _setLabelColorMap] = useState<{ [key: number]: Color }>(segmentation_category_colors);
   const [progress, setProgress] = useState(0);
 
 
