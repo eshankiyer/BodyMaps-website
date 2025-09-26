@@ -4,12 +4,13 @@ import { Niivue } from '@niivue/niivue';
 import { IconDownload, IconHome, IconReport, IconSettings } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import RotatingModelLoader from '../components/Loading';
 import OpacitySlider from '../components/OpacitySlider/OpacitySlider';
 import OrganCheckbox from '../components/OrganCheckbox';
 import ReportScreen from '../components/ReportScreen/ReportScreen';
 import WindowingSlider from '../components/WindowingSlider/WindowingSlider';
 import { renderVisualization, setToolGroupOpacity, setVisibilities } from '../helpers/CornerstoneNifti';
-import { create3DVolume, updateGeneralOpacity, updateVisibilities } from '../helpers/NiiVueNifti';
+import { create3DVolume, updateVisibilities } from '../helpers/NiiVueNifti';
 import { API_BASE, APP_CONSTANTS, segmentation_categories, segmentation_category_colors } from '../helpers/constants';
 import { filenameToName } from '../helpers/utils';
 import { type CheckBoxData, type LastClicked, type NColorMap } from '../types';
@@ -48,9 +49,8 @@ function VisualizationPage() {
   const [_lastClicked, setLastClicked] = useState<LastClicked | null>(null);
   const [showTaskDetails, setShowTaskDetails] = useState(true);
   const [showOrganDetails, setShowOrganDetails] = useState(false);  
-  // const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [labelColorMap, _setLabelColorMap] = useState<{ [key: number]: Color }>(segmentation_category_colors);
-  const [progress, setProgress] = useState(0);
 
 
   
@@ -91,7 +91,7 @@ function VisualizationPage() {
 
 
       const result =
-        await renderVisualization(axial_ref.current, sagittal_ref.current, coronal_ref.current, cmap, pantsCase, setProgress);
+        await renderVisualization(axial_ref.current, sagittal_ref.current, coronal_ref.current, cmap, pantsCase, setLoading);
 
       
       // setLoading(false);
@@ -204,13 +204,13 @@ function VisualizationPage() {
     const value = Number(event.target.value);
     setOpacityValue(value);
     setToolGroupOpacity(value / 100);
-    updateGeneralOpacity(render_ref, value / 100);
+    // updateGeneralOpacity(render_ref, value / 100);
   };
 
   const handleOpacityOnFormSubmit = (value: number) => {
     setOpacityValue(value);
     setToolGroupOpacity(value / 100);
-    updateGeneralOpacity(render_ref, value / 100);
+    // updateGeneralOpacity(render_ref, value / 100);
   };
 
   const handleDownloadClick = async () => {
@@ -320,16 +320,8 @@ function VisualizationPage() {
           null
         } */}
         {
-          progress < 1 ? 
-          <div className="flex flex-col items-center justify-center gap-2 z-3 absolute top-0 left-0 w-screen h-screen bg-black/50">
-          <div className="text-2xl font-bold">Loading...</div>
-          <div className="w-4/5 h-6 relative bg-gray-200 rounded-lg overflow-hidden mx-auto">
-          <div
-            className="h-full bg-blue-500 transition-all duration-1000 ease-in-out"
-            style={{ width: `${progress * 100}%` }}
-            />
-          </div>
-          </div> :
+          loading ? 
+         <RotatingModelLoader/>:
           null
         }
           <div

@@ -1,6 +1,4 @@
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { API_BASE } from "../helpers/constants";
 import type { PreviewType } from "../types";
 
 type Props = {
@@ -12,25 +10,25 @@ export default function Preview({ id, previewMetadata }: Props) {
 	
 	// ! if image not preloaded in public folder
 
-	const [_thumbnail, setThumbnail] = useState<string>("");
-	useEffect(() => {
-		const getPreview = async () => {
-			try {
-			const res = await fetch(`${API_BASE}/api/get_image_preview/${id}`);
-				if (!res.ok) {
-					throw new Error(
-						`Failed to fetch preview: ${res.status} ${res.statusText}`
-					);
-				}
-				const data = await res.blob();
-				const url = URL.createObjectURL(data);
-				setThumbnail(url);
-			} catch (e) {
-				console.error(e);
-			}
-		};
-		getPreview();
-	}, [id]);
+	// const [_thumbnail, setThumbnail] = useState<string>("");
+	// useEffect(() => {
+	// 	const getPreview = async () => {
+	// 		try {
+	// 		const res = await fetch(`${API_BASE}/api/get_image_preview/${id}`);
+	// 			if (!res.ok) {
+	// 				throw new Error(
+	// 					`Failed to fetch preview: ${res.status} ${res.statusText}`
+	// 				);
+	// 			}
+	// 			const data = await res.blob();
+	// 			const url = URL.createObjectURL(data);
+	// 			setThumbnail(url);
+	// 		} catch (e) {
+	// 			console.error(e);
+	// 		}
+	// 	};
+	// 	getPreview();
+	// }, [id]);
 
 	if (!previewMetadata) return null;
 
