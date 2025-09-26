@@ -36,7 +36,6 @@ export async function create3DVolume(canvasRef: React.RefObject<HTMLCanvasElemen
       console.warn(`❗ Invalid color for label ${labelId}`);
       continue;
     }
-    console.log(`❗ label ${labelId}  ${color[0]}`)
     R[labelId] = color[0];
     G[labelId] = color[1];
     B[labelId] = color[2];
@@ -51,7 +50,6 @@ export async function create3DVolume(canvasRef: React.RefObject<HTMLCanvasElemen
     I: I
   }
   
-  console.log(`❗ RGBA ${R}  ${G} ${B}  ${A} ${I} `)
 
 
   nvImage.setColormapLabel({
@@ -108,12 +106,10 @@ export function updateVisibilities(nv: Niivue, checkState: boolean[], _sessionId
   };
 
   console.log("🔧 updateVisibilities: applying visibility mask for", checkState);
-  console.log("❗ RGBA =", cmap.R, cmap.G, cmap.B, cmap.A, cmap.I);
 
   for (let i = 1; i < checkState.length; i++) {
     if (checkState[i] === false) {
       cmap.A[i] = 0;
-      console.log(`Label ${i} -> ${checkState[i] ? 'visible' : 'hidden'}`);
     }
   }
 
@@ -123,9 +119,9 @@ export function updateVisibilities(nv: Niivue, checkState: boolean[], _sessionId
 }
 
 
-export function updateGeneralOpacity(canvasRef: React.RefObject<HTMLCanvasElement | null>, opacityValue: number){ //for all volumes, continuous opacity values
-  if (canvasRef.current)  {
-    canvasRef.current.style.opacity = opacityValue.toString();
-  }
-}
+// export function updateGeneralOpacity(canvasRef: React.RefObject<HTMLCanvasElement | null>, opacityValue: number){ //for all volumes, continuous opacity values
+//   if (canvasRef.current)  {
+//     canvasRef.current.style.opacity = opacityValue.toString();
+//   }
+// }
     

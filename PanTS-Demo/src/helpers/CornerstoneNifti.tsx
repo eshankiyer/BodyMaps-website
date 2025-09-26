@@ -23,6 +23,7 @@ import type { ColorLUT } from '@cornerstonejs/core/dist/types/types';
 import { cornerstoneNiftiImageVolumeLoader } from '@cornerstonejs/nifti-volume-loader';
 import type { VisualizationRenderReturnType } from '../types';
 import { APP_CONSTANTS } from './constants';
+import { getPanTSId } from './utils';
 
 const toolGroupId = "myToolGroup";
 const renderingEngineId = "myRenderingEngine";
@@ -44,7 +45,7 @@ const toolGroupSpecificRepresentationConfig = {
   },
 };
 
-export async function renderVisualization(ref1: HTMLDivElement | null, ref2: HTMLDivElement | null, ref3: HTMLDivElement | null, convertedColorLUT: ColorLUT, clabelId: string, setProgress: React.Dispatch<React.SetStateAction<number>>): Promise<VisualizationRenderReturnType | undefined> {
+export async function renderVisualization(ref1: HTMLDivElement | null, ref2: HTMLDivElement | null, ref3: HTMLDivElement | null, convertedColorLUT: ColorLUT, clabelId: string, setLoading: React.Dispatch<React.SetStateAction<boolean>>): Promise<VisualizationRenderReturnType | undefined> {
   cache.purgeCache();
   csTools3dInit();
   await csInit();
@@ -60,7 +61,9 @@ export async function renderVisualization(ref1: HTMLDivElement | null, ref2: HTM
   volumeLoader.registerVolumeLoader('nifti', cornerstoneNiftiImageVolumeLoader);
   const renderingEngine = createRenderingEngine();
 
-  const mainNiftiURL = `${APP_CONSTANTS.API_ORIGIN}/api/get-main-nifti/${clabelId}`;
+  // const mainNiftiURL = `${APP_CONSTANTS.API_ORIGIN}/api/get-main-nifti/${clabelId}`;
+  const pants_id = getPanTSId(clabelId);
+  const mainNiftiURL = `https://huggingface.co/datasets/BodyMaps/iPanTSMini/resolve/main/image_only/${pants_id}/ct.nii.gz?download=true`
   const volumeId = 'nifti:' + mainNiftiURL;
 
   const viewportId1 = 'CT_NIFTI_AXIAL';
@@ -74,8 +77,7 @@ export async function renderVisualization(ref1: HTMLDivElement | null, ref2: HTM
   const segmentationURL = `${APP_CONSTANTS.API_ORIGIN}/api/get-segmentations/${clabelId}`;
   const combined_labels_Id = 'nifti:' + segmentationURL;
   const combined_labels = await volumeLoader.createAndCacheVolume(combined_labels_Id);
-  setProgress(1)
-  // setLoading(false);
+  setLoading(false);
   const segmentationVolumeArray = combined_labels.getScalarData(); // ✅ 加这一句
 
   //const colorLUT = [];
@@ -126,9 +128,6 @@ export async function renderVisualization(ref1: HTMLDivElement | null, ref2: HTM
   //   convertedColorLUT[labelId] = [r, g, b, a];
   //   console.log(`✅ Label ${labelId}: RGB(${r}, ${g}, ${b}), A: ${a}`);
   // }
-  convertedColorLUT.forEach((color, labelId) => {
-    console.log(`labelId: ${labelId}, color: ${JSON.stringify(color)}`);
-  })
 
   console.log("✅ convertedColorLUT = ", convertedColorLUT);
 
@@ -213,7 +212,6 @@ export async function renderVisualization(ref1: HTMLDivElement | null, ref2: HTM
         colorLUTOrIndex: convertedColorLUT,
       }, 
     }],toolGroupSpecificRepresentationConfig );
-  console.log("labelmaps rendered");
   return {
     segRepUIDs,
     renderingEngine,

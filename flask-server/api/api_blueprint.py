@@ -128,17 +128,17 @@ def get_label_colormap(clabel_id):
 
 
 
-@api_blueprint.before_request
-def before_request():
-    global last_session_check
-    current_time = datetime.now()
-    if current_time >= last_session_check + timedelta(minutes=Constants.SCHEDULED_CHECK_INTERVAL):
-        session_manager = SessionManager.instance()
-        expired = session_manager.get_expired()
-        for app_session in expired:
-            session_manager.terminate_session(app_session.session_id)
+# @api_blueprint.before_request
+# def before_request():
+#     global last_session_check
+#     current_time = datetime.now()
+#     if current_time >= last_session_check + timedelta(minutes=Constants.SCHEDULED_CHECK_INTERVAL):
+#         session_manager = SessionManager.instance()
+#         expired = session_manager.get_expired()
+#         for app_session in expired:
+#             session_manager.terminate_session(app_session.session_id)
         
-        last_session_check = current_time
+#         last_session_check = current_time
 
 @api_blueprint.route('/', methods=['GET'])
 def home():

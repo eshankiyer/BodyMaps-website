@@ -9,6 +9,33 @@ import type {
 
 export const API_BASE = import.meta.env.VITE_API_BASE;
 
+// old
+// const x = {
+//   1:  [229, 68, 68, 128],
+//   2:  [229, 117, 68, 128],
+//   3:  [229, 165, 68, 128],
+//   5:  [229, 213, 68, 128],
+//   6:  [197, 229, 68, 128],
+//   7:  [149, 229, 68, 128],
+//   8:  [100, 229, 68, 128],
+//   11: [68, 229, 84, 128],
+//   12: [65, 105, 225, 255], // Kidney (royal blue)
+//   13: [30, 144, 255, 255], // Kidney (dodger blue)
+//   14: [68, 229, 229, 128],
+//   15: [173, 216, 230, 255], // Lung (light blue)
+//   16: [135, 206, 235, 255], // Lung (sky blue)
+//   17: [68, 84, 229, 128],
+//   18: [100, 68, 229, 128],
+//   19: [149, 68, 229, 128],
+//   20: [197, 68, 229, 128],
+//   21: [229, 68, 213, 128],
+//   23: [229, 68, 165, 128],
+//   25: [229, 68, 117, 128],
+//   26: [229, 117, 68, 128],
+//   27: [229, 68, 68, 128],
+//   28: [229, 213, 68, 128]
+// }
+
 export const segmentation_category_colors: { [key: number]: Color } = {
 	1: [255, 140, 0, 255], // Dark orange
 	2: [255, 165, 0, 255], // Orange
@@ -18,14 +45,14 @@ export const segmentation_category_colors: { [key: number]: Color } = {
 	6: [255, 160, 122, 255], // Digestive (salmon)
 	7: [34, 139, 34, 255], // Green (bile duct)
 	8: [255, 127, 80, 255], // Coral (GI tract)
-	9: [245, 245, 245,255], // Bone (light gray)
+	9: [245, 245, 245, 255], // Bone (light gray)
 	10: [220, 220, 220, 255], // Bone (gray)
 	11: [0, 128, 0, 255], // Dark green
-	12: [65, 105, 225, 255], // Kidney (royal blue)
-	13: [30, 144, 255, 255], // Kidney (dodger blue)
+	12: [68, 229, 133, 128],
+	13: [68, 229, 181, 128],
 	14: [178, 34, 34, 255], // Liver (brownish red)
-	15: [173, 216, 230, 255], // Lung (light blue)
-	16: [135, 206, 235, 255], // Lung (sky blue)
+	15: [68, 181, 229, 128],
+	16: [68, 133, 229, 128],
 	17: [255, 182, 193, 255], // Pancreas (light pink)
 	18: [255, 105, 180, 255], // Pancreas (hot pink)
 	19: [219, 112, 147, 255], // Pancreas (pale violet red)
@@ -77,7 +104,9 @@ export const OrganSystemsArray: Systems[] = [
 	"Endocrine System",
 	"Urinary System",
 	"Skeletal System",
-	"Lymphatic/Immune System",
+	"Lymphatic System",
+	"Reproductive System",
+	"Respiratory System"
 	// "Adrenal Glands",
 	// "Pancreas",
 	// "Kidneys",
@@ -118,7 +147,7 @@ export const OrganSystems: OrganSystemsType = {
 	],
 	"Respiratory System": ["lung_left", "lung_right"],
 	"Reproductive System": ["prostate"],
-	"Lymphatic/Immune System": ["spleen"],
+	"Lymphatic System": ["spleen"],
 };
 
 const RED = [230, 25, 75, 255];

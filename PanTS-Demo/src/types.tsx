@@ -78,7 +78,7 @@ export type SegmentationAnnotations = {
 	[key in SegmentationCategories]?: string[];
 };
 
-export type Systems = "Vascular System" | "Lymphatic/Immune System" | "Reproductive System" | "Urinary System" | "Digestive System" | "Skeletal System" | "Respiratory System" | "Endocrine System";
+export type Systems = "Vascular System" | "Lymphatic System" | "Reproductive System" | "Urinary System" | "Digestive System" | "Skeletal System" | "Respiratory System" | "Endocrine System";
 export type SubSystems = "Adrenal Glands" | "Pancreas" | "Kidneys" | "Lung"
 
 export type AllSystems = Systems | SubSystems;
