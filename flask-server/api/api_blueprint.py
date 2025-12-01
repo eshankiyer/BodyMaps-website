@@ -691,7 +691,7 @@ def api_random_topk_rotate_norand():
             na_position="last",
             kind="mergesort",
         )
-
+        df = df.drop_duplicates(subset="__shape_sum", keep="first")
         if len(df) == 0:
             return jsonify({"items": [], "total": 0, "meta": {"k": 0, "used_recent": 0}}), 200
 
@@ -728,11 +728,11 @@ def api_random_topk_rotate_norand():
             now = datetime.utcnow()
             offset = ((now.minute * 60) + now.second) % len(topk)
 
-        idx = list(range(len(topk))) + list(range(len(topk)))
-        pick = idx[offset:offset + min(n, len(topk))]
-        sub = topk.iloc[pick]
+        # idx = list(range(len(topk))) + list(range(len(topk)))
+        # pick = idx[offset:offset + min(n, len(topk))]
+        # sub = topk.iloc[pick]
 
-        items = [row_to_item(r) for _, r in sub.iterrows()]
+        items = [row_to_item(r) for _, r in topk.iterrows()]
         resp = jsonify({
             "items": clean_json_list(items),
             "total": int(len(df)),
