@@ -37,7 +37,7 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 95vw;
             margin: 0 auto;
             position: relative
         }
@@ -73,7 +73,7 @@
             height: var(--control-h);
             display: flex;
             align-items: center;
-            padding: 10px 12px;
+            padding: 0px 12px;
             border: 1px solid var(--line);
             border-radius: 10px;
             background: var(--panel-soft);
@@ -1282,11 +1282,11 @@ body.viewer-open .hero {
     display: grid;
     grid-template-columns: 380px minmax(0, 1fr); /* 左側 Advanced 380px，可依需要改 */
     gap: 20px; /* 中間距離稍微縮小 */
-    max-width: 90%;
-    width: 90%;
+    max-width: 100%;
+    width: 100%;
     margin: 0 auto;
-    padding-left: 20px;   /* 左右外邊界都縮小 */
-    padding-right: 20px;
+    /* padding-left: 20px;   左右外邊界都縮小 */
+    /* padding-right: 20px; */
   }
 
   /* Advanced（左側） */
@@ -1949,12 +1949,8 @@ try {
   bar.innerHTML = '';
 
   let source = [];
-  if (ALL_ITEMS && ALL_ITEMS.length) {
-    source = ALL_ITEMS;
-  } else {
-    const r = await fetchJSON(apiUrl + '/api/random?n=60&k=120&scope=filtered');
-    source = r.items || [];
-  }
+  const r = await fetchJSON(apiUrl + '/api/random?n=60&k=120&scope=all');
+  source = r.items || [];
 
   const best = source.slice().sort(compareQuality).filter(isComplete).slice(0, 20);
 
