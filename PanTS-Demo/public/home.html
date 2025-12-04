@@ -1292,7 +1292,11 @@ body.viewer-open .hero {
   /* Advanced（左側） */
   #filters, .facetPanel {
     width: 100%;
-    max-width: 400px;
+    position: sticky;
+    height: 100vh;
+    overflow: auto;
+    top: 0;
+    max-width: 360px;
   }
 
   /* Results（右側卡片區） */
