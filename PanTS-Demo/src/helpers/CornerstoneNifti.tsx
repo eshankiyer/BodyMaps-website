@@ -80,7 +80,7 @@ export async function renderVisualization(ref1: HTMLDivElement | null, ref2: HTM
     pants_id = getPanTSId(pants_id);
   }
 
-  let case_id = clabelId.replace("PanTS_", "");
+  let case_id = Number(clabelId.replace("PanTS_", ""));
   const mainNiftiURL = `https://huggingface.co/datasets/BodyMaps/iPanTSMini/resolve/main/image_only/${pants_id}/ct.nii.gz?download=true`
   const volumeId = 'nifti:' + mainNiftiURL;
 
