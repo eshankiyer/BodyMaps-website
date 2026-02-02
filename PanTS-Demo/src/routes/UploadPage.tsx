@@ -5,6 +5,7 @@ import {
   IconArrowUp,
   IconDownload
 } from "@tabler/icons-react";
+import { API_BASE } from '../helpers/constants';
 
 interface UploadPageProps {}
 
@@ -51,8 +52,6 @@ const UploadPage: React.FC<UploadPageProps> = () => {
     try {
       const formData = new FormData();
       selectedFiles.forEach(f => formData.append("files", f));
-
-      const API_BASE = import.meta.env.VITE_API_BASE;
 
       const res = await fetch(`${API_BASE}/api/upload-inference`, {
         method: "POST",
