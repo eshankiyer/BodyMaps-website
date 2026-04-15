@@ -4,7 +4,6 @@ import { cornerstoneNiftiImageLoader, createNiftiImageIdsAndCacheMetadata, init 
 import * as cornerstoneTools from '@cornerstonejs/tools';
 import { init as cornerstoneToolsInit } from '@cornerstonejs/tools';
 import { SegmentationRepresentations } from "@cornerstonejs/tools/enums";
-import { APP_CONSTANTS } from "./constants";
 import { getPanTSId } from "./utils";
 
 type viewportIdTypes = 'CT_NIFTI_AXIAL' | 'CT_NIFTI_SAGITTAL' | 'CT_NIFTI_CORONAL';
@@ -73,8 +72,7 @@ export async function renderVisualization(ref1: HTMLDivElement, ref2: HTMLDivEle
 
     const pants_id = getPanTSId(clabelId);
     const mainNiftiURL = `https://huggingface.co/datasets/BodyMaps/iPanTSMini/resolve/main/image_only/${pants_id}/ct.nii.gz?download=true`
-    console.log(APP_CONSTANTS.API_ORIGIN)
-    const segmentationURL = `${APP_CONSTANTS.API_ORIGIN}/api/get-segmentations/${clabelId}`;
+    const segmentationURL = `https://huggingface.co/datasets/BodyMaps/iPanTSMini/resolve/main/mask_only/${pants_id}/combined_labels.nii.gz?download=true`;
     ToolGroupManager.destroyToolGroup(toolGroupId);
     const toolGroup = ToolGroupManager.createToolGroup(toolGroupId);
     if (!toolGroup) {
