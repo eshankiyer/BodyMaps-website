@@ -2153,10 +2153,10 @@ section#recBar {           /* ⭐ 把 Browse 也拉進來一起對齊 */
 
     <script>
 let apiUrl;
-if (location.hostname === " ") {
+if (location.hostname === "localhost") {
   apiUrl = "http://localhost:5001";
 } else {
-  apiUrl = "https://bodymaps.wse.jhu.edu";
+  apiUrl = "https://api.pantsview.com";
 }
 // 顯示「Results: …」/ 設定總數
 function setResultsLoading(on = true) {
@@ -2198,7 +2198,8 @@ function profileURL(idNum){
   const raw = `https://huggingface.co/datasets/BodyMaps/iPanTSMini/resolve/main/profile_only/PanTS_${p}/profile.jpg`;
 
   // 走 proxy 來避免 COEP 擋
-  return apiUrl + `/api/proxy-image?url=${encodeURIComponent(raw)}`;
+  return raw;
+  // return apiUrl + `/api/proxy-image?url=${encodeURIComponent(raw)}`;
 }
 
 function extractNumFromId(idStr){
