@@ -50,77 +50,22 @@ def _resolve_conda_activate_path():
 
 def run_auto_segmentation(input_path, session_dir, model):
     """
-    Run auto segmentation model using Apptainer inside the given session directory.
+    Dispatch to the appropriate model inference function.
+    Returns the output directory path on success, raises on failure.
     """
-    subfolder_name = "ct"
-
-    input_case_dir = os.path.join(session_dir, "inputs")
-    outputs_root = os.path.join(session_dir, "outputs")
-    input_case_ct_dir = os.path.join(input_case_dir, subfolder_name)
-    os.makedirs(input_case_ct_dir, exist_ok=True)
-    os.makedirs(outputs_root, exist_ok=True)
-
-    input_filename = os.path.basename(input_path)
-    container_input_path = os.path.join(input_case_ct_dir, input_filename)
-    shutil.copy2(input_path, container_input_path)
-
-    conda_activate_cmd = ""
-
-    conda_path = _resolve_conda_activate_path()
-    epai_env_name = os.getenv("CONDA_ENV_EPAI", "ePAI")
-    suprem_sandbox_path = os.getenv("SUPREM_SANDBOX_PATH", "")
-    epai_script_path = os.getenv("EPAI_SCRIPT_PATH", "")
-
-    if model == 'SuPreM':
-        container_path = suprem_sandbox_path
-        print(input_case_dir, outputs_root)
-
-        apptainer_cmd = [
-            "apptainer", "run", "--nv",
-            "-B", f"{input_case_dir}:/workspace/inputs",
-            "-B", f"{outputs_root}:/workspace/outputs",
-            container_path
-        ]
-    elif model == 'ePAI':
-        output_path = _run_epai_inference(
+    if model == 'ePAI':
+        conda_path = _resolve_conda_activate_path()
+        return _run_epai_inference(
             input_path=input_path,
             session_dir=session_dir,
             conda_path=conda_path,
-            epai_env_name=epai_env_name,
-            fallback_script_path=epai_script_path,
+            epai_env_name=os.getenv("CONDA_ENV_EPAI", "epai"),
+            fallback_script_path=os.getenv("EPAI_SCRIPT_PATH", ""),
         )
-        if output_path is None:
-            print("[ERROR] ePAI inference failed")
-            return None
-        return output_path
+    elif model == 'SuPreM':
+        return _run_suprem_inference(input_path=input_path, session_dir=session_dir)
     else:
-        print(f"[ERROR] Unknown model: {model}")
-        return None
-
-    selected_gpu = get_least_used_gpu()
-    apptainer_cmd = ["CUDA_VISIBLE_DEVICES=" + selected_gpu] + apptainer_cmd
-    print(apptainer_cmd)
-    try:
-        print(f"[INFO] Running {model} auto segmentation for file: {input_filename}")
-        full_cmd = f"{conda_activate_cmd} {' '.join(apptainer_cmd)}"
-        subprocess.run(full_cmd, shell=True, executable="/bin/bash", check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"[ERROR] {model} inference failed:", e)
-        return None
-
-    if model == 'SuPreM':
-        output_path = os.path.join(outputs_root, subfolder_name, "segmentations")
-        if not os.path.exists(output_path):
-            print("[ERROR] Output mask not found at:", output_path)
-            return None
-    elif model == 'ePAI':
-        output_path = os.path.join(outputs_root, subfolder_name, "combined_labels.nii.gz")
-        if not os.path.exists(output_path):
-            print("[ERROR] Output mask not found at:", output_path)
-            return None
-        output_path = os.path.join(outputs_root, subfolder_name)
-
-    return output_path
+        raise ValueError(f"Unknown model: {model}")
 
 
 def _normalize_case_id(input_path_or_filename: str) -> str:
@@ -312,6 +257,66 @@ def _run_epai_inference(input_path: str, session_dir: str, conda_path: str, epai
     shutil.copy2(output_csv_path, os.path.join(output_ct_dir, "output.csv"))
 
     return output_ct_dir
+
+
+def _run_suprem_inference(input_path: str, session_dir: str) -> str:
+    """
+    Run SuPreM segmentation natively using the extracted inference.py.
+
+    Input layout:
+        <session_dir>/suprem/inputs/ct/ct.nii.gz
+
+    Output layout written by inference.py:
+        <session_dir>/suprem/outputs/ct/combined_labels.nii.gz
+        <session_dir>/suprem/outputs/ct/segmentations/*.nii.gz
+    """
+    suprem_workspace = os.path.join(session_dir, "suprem")
+    input_case_dir = os.path.join(suprem_workspace, "inputs", "ct")
+    output_dir = os.path.join(suprem_workspace, "outputs")
+    os.makedirs(input_case_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
+
+    # inference.py expects the file named ct.nii.gz inside a case subfolder
+    ct_link = os.path.join(input_case_dir, "ct.nii.gz")
+    if os.path.lexists(ct_link):
+        os.remove(ct_link)
+    os.symlink(os.path.abspath(input_path), ct_link)
+
+    suprem_src = os.getenv("SUPREM_SRC_PATH", "/home/visitor/suprem_native/workspace/SuPreM")
+    checkpoint = os.getenv(
+        "SUPREM_CHECKPOINT_PATH",
+        "/home/visitor/suprem_native/workspace/SuPreM/pretrained_checkpoints/supervised_suprem_unet_2100.pth",
+    )
+    conda_env = os.getenv("CONDA_ENV_SUPREM", "suprem")
+    conda_exe = shutil.which("conda") or "/home/apps/anaconda3/condabin/conda"
+    selected_gpu = get_least_used_gpu()
+    inputs_dir = os.path.join(suprem_workspace, "inputs")
+
+    full_cmd = (
+        f"CUDA_VISIBLE_DEVICES={shlex.quote(selected_gpu)} "
+        f"{shlex.quote(conda_exe)} run -n {shlex.quote(conda_env)} "
+        f"python -W ignore {shlex.quote(os.path.join(suprem_src, 'inference.py'))} "
+        f"--data_root_path {shlex.quote(inputs_dir)} "
+        f"--save_dir {shlex.quote(output_dir)} "
+        f"--resume {shlex.quote(checkpoint)} "
+        f"--store_result"
+    )
+
+    print(f"[INFO] Running SuPreM native inference")
+    print(full_cmd)
+    try:
+        subprocess.run(full_cmd, shell=True, executable="/bin/bash", check=True,
+                       cwd=suprem_src)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(
+            f"SuPreM inference failed\nCommand: {full_cmd}\nExit code: {e.returncode}"
+        ) from e
+
+    case_output = os.path.join(output_dir, "ct")
+    if not os.path.isdir(case_output):
+        raise RuntimeError(f"SuPreM output directory not found: {case_output}")
+
+    return case_output
 
 
 def _is_truthy(value: str) -> bool:

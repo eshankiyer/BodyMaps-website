@@ -523,12 +523,12 @@ def _start_auto_segmentation(session_id, model_name, ct_file=None, server_input_
 
             zip_path = os.path.join(session_path, "auto_masks.zip")
             with zipfile.ZipFile(zip_path, 'w') as zipf:
-                for filename in os.listdir(output_mask_dir):
-                    include_csv = (model_name == "ePAI") and filename.endswith(".csv")
-                    include_mask = filename.endswith(".nii.gz")
-                    if include_mask or include_csv:
-                        abs_path = os.path.join(output_mask_dir, filename)
-                        zipf.write(abs_path, arcname=filename)
+                for dirpath, _, filenames in os.walk(output_mask_dir):
+                    for filename in filenames:
+                        if filename.endswith(".nii.gz") or (model_name == "ePAI" and filename.endswith(".csv")):
+                            abs_path = os.path.join(dirpath, filename)
+                            arcname = os.path.relpath(abs_path, output_mask_dir)
+                            zipf.write(abs_path, arcname=arcname)
 
             if session_id in progress_tracker:
                 start_time, expected_time, _ = progress_tracker[session_id]
@@ -590,6 +590,7 @@ def run_epai_inference():
         return None
 
     session_id = _pick_text("session_id", "SESSION_ID", "sessionId") or str(uuid.uuid4())
+    model_name = _pick_text("model_name", "model", "MODEL_NAME") or "ePAI"
     uploaded_filename = _pick_text("uploaded_filename", "output_filename", "filename")
     input_server_path = _pick_text("INPUT_SERVER_PATH", "input_server_path", "server_path", "path")
     ct_file = (
@@ -634,7 +635,7 @@ def run_epai_inference():
 
     return _start_auto_segmentation(
         session_id=session_id,
-        model_name="ePAI",
+        model_name=model_name,
         ct_file=ct_file,
         server_input_path=input_server_path,
     )

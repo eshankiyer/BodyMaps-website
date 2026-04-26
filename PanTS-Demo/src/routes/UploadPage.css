@@ -91,8 +91,37 @@
   margin-top: 0.75rem;
   width: 100%;
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   justify-content: center;
+  align-items: center;
+}
+
+.model-selector {
+  display: flex;
+  gap: 0.25rem;
+  background: rgba(255,255,255,0.1);
+  border-radius: 9999px;
+  padding: 0.2rem;
+}
+
+.model-button {
+  background: transparent;
+  color: #fff;
+  border: none;
+  padding: 0.35rem 0.9rem;
+  border-radius: 9999px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.model-button:hover {
+  background: rgba(255,255,255,0.15);
+}
+
+.model-button--active {
+  background: #005cdd;
 }
 
 .upload-meta {

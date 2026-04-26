@@ -35,8 +35,7 @@ const UploadPage: React.FC<UploadPageProps> = () => {
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [inferenceProgress, setInferenceProgress] = useState<number>(0);
   const [isInferencing, setIsInferencing] = useState<boolean>(false);
-  // const [, setInferenceStarted] = useState(false);
-  // const [, setZipFilename] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<"ePAI" | "SuPreM">("ePAI");
 
   const allowedExtensions = [".nii", ".nii.gz"];
 
@@ -188,7 +187,7 @@ const UploadPage: React.FC<UploadPageProps> = () => {
       return;
     }
 
-    setMessage("Starting ePAI inference...");
+    setMessage(`Starting ${selectedModel} inference...`);
     setInferenceProgress(0);
     setIsInferencing(true);
 
@@ -200,6 +199,7 @@ const UploadPage: React.FC<UploadPageProps> = () => {
 
     const formData = new FormData();
     formData.append("session_id", sessionId || crypto.randomUUID());
+    formData.append("model_name", selectedModel);
 
     if (serverPath.trim()) {
       formData.append("INPUT_SERVER_PATH", serverPath.trim());
@@ -217,7 +217,7 @@ const UploadPage: React.FC<UploadPageProps> = () => {
 
       const sid = data.session_id || formData.get("session_id")?.toString() || "";
       setSessionId(sid);
-      setMessage(`ePAI inference started. Session: ${sid}`);
+      setMessage(`${selectedModel} inference started. Session: ${sid}`);
       if (sid) {
         startInferencePolling(sid);
       }
@@ -434,7 +434,18 @@ const UploadPage: React.FC<UploadPageProps> = () => {
       </div>
 
       <div className="upload-actions">
-        <button className="upload-button" onClick={handleRunEpaiInference}>Run ePAI</button>
+        <div className="model-selector">
+          {(["ePAI", "SuPreM"] as const).map(model => (
+            <button
+              key={model}
+              className={`model-button ${selectedModel === model ? "model-button--active" : ""}`}
+              onClick={() => setSelectedModel(model)}
+            >
+              {model}
+            </button>
+          ))}
+        </div>
+        <button className="upload-button" onClick={handleRunEpaiInference}>Run</button>
         <button className="upload-button" onClick={handleCheckStatus}>Check Status</button>
         <button className="upload-button" onClick={handleDownloadResult}>Download</button>
       </div>
