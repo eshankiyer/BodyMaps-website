@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import About from "../components/About";
 import Header from "../components/Header";
+import InferenceUpload from "../components/InferenceUpload";
 import Preview from "../components/Preview";
 import { API_BASE } from "../helpers/constants";
 import type { PreviewType } from "../types";
@@ -69,6 +70,13 @@ export default function Homepage() {
 		<div className="flex gap-4 flex-col text-white relative min-h-screen">
 			<Header handleAboutClick={handleAboutClick} />
 			<div className="flex flex-col gap-3 p-4 justify-center items-center w-screen">
+				{/* Upload & inference */}
+				<div className="w-full max-w-md">
+					<div className="text-lg font-bold mb-3 text-center">Run Inference on Your CT</div>
+					<InferenceUpload />
+				</div>
+				<hr className="w-screen opacity-30" />
+
 				<div className="text-2xl flex items-center gap-2 font-bold">
 					<div>Previews</div>
 					<div

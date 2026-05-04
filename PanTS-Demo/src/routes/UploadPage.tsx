@@ -37,7 +37,7 @@ const UploadPage: React.FC<UploadPageProps> = () => {
   const [inferenceProgress, setInferenceProgress] = useState<number>(0);
   const [isInferencing, setIsInferencing] = useState<boolean>(false);
   const [inferenceCompleted, setInferenceCompleted] = useState<boolean>(false);
-  const [selectedModel, setSelectedModel] = useState<"ePAI" | "SuPreM" | "OpenVAE" | "MedFormer" | "">("");
+  const [selectedModel, setSelectedModel] = useState<"ePAI" | "SuPreM" | "OpenVAE" | "MedFormer" | "R-Super" | "">("");
 
   const allowedExtensions = [".nii", ".nii.gz"];
 
@@ -327,7 +327,7 @@ const UploadPage: React.FC<UploadPageProps> = () => {
 
       const sid = data.session_id || newSessionId;
       setSessionId(sid);
-      setSelectedModel("ePAI");
+      setSelectedModel("ePAI" as const);
       setMessage(`ePAI inference started on reconstructed CT. Session: ${sid}`);
       if (sid) {
         startInferencePolling(sid);
@@ -477,12 +477,13 @@ const UploadPage: React.FC<UploadPageProps> = () => {
         <select
           className="model-select"
           value={selectedModel}
-          onChange={(e) => setSelectedModel(e.target.value as "ePAI" | "SuPreM" | "OpenVAE" | "MedFormer" | "")}
+          onChange={(e) => setSelectedModel(e.target.value as "ePAI" | "SuPreM" | "OpenVAE" | "MedFormer" | "R-Super" | "")}
         >
           <option value="" disabled>Select a model</option>
           <option value="ePAI">ePAI</option>
           <option value="SuPreM">SuPreM</option>
           <option value="MedFormer">MedFormer</option>
+          <option value="R-Super">R-Super</option>
           <option value="OpenVAE">OpenVAE</option>
         </select>
         <button className="upload-button" onClick={handleRunEpaiInference} disabled={!selectedModel}>Run</button>
