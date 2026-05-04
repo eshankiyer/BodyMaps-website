@@ -74,6 +74,8 @@ def run_auto_segmentation(input_path, session_dir, model):
             return _run_openvae_inference(input_path=input_path, session_dir=session_dir)
         elif model == 'MedFormer':
             return _run_medformer_inference(input_path=input_path, session_dir=session_dir)
+        elif model == 'R-Super':
+            return _run_rsuper_inference(input_path=input_path, session_dir=session_dir)
         else:
             raise ValueError(f"Unknown model: {model}")
 
@@ -557,6 +559,69 @@ def _run_medformer_inference(input_path: str, session_dir: str) -> str:
 
     if not os.path.exists(combined_label_path):
         raise RuntimeError(f"MedFormer combined_labels not created at {combined_label_path}")
+
+    return output_dir
+
+
+def _run_rsuper_inference(input_path: str, session_dir: str) -> str:
+    """
+    Run R-Super (MedFormer + report supervision) segmentation.
+    Same pipeline as MedFormer, different checkpoint trained on Merlin + PanTS reports.
+    """
+    output_dir = os.path.join(session_dir, "rsuper")
+    os.makedirs(output_dir, exist_ok=True)
+
+    rsuper_src = os.getenv("RSUPER_SRC_PATH", "/home/visitor/rsuper/rsuper_train")
+    checkpoint = os.getenv(
+        "RSUPER_CHECKPOINT_PATH",
+        "/home/visitor/rsuper/R-SuperPanTSMerlin/merlin_pancreas_pants_release/fold_0_latest.pth",
+    )
+    class_list = os.getenv(
+        "MEDFORMER_CLASS_LIST",
+        "/home/visitor/rsuper/MedFormerPanTS/labels_pants.yaml",
+    )
+    conda_env = os.getenv("CONDA_ENV_MEDFORMER", "rsuper")
+    conda_exe = shutil.which("conda") or "/home/apps/anaconda3/condabin/conda"
+    selected_gpu = get_least_used_gpu()
+
+    bdmap_id = "BDMAP_00000001"
+    staging_dir = os.path.join(output_dir, "input")
+    os.makedirs(staging_dir, exist_ok=True)
+    staged_ct = os.path.join(staging_dir, f"{bdmap_id}.nii.gz")
+    if not os.path.exists(staged_ct):
+        shutil.copy2(input_path, staged_ct)
+
+    raw_save_path = os.path.join(output_dir, "raw_output")
+    os.makedirs(raw_save_path, exist_ok=True)
+
+    inference_script = os.path.join(rsuper_src, "predict_abdomenatlas.py")
+    full_cmd = (
+        f"CUDA_VISIBLE_DEVICES={shlex.quote(selected_gpu)} "
+        f"{shlex.quote(conda_exe)} run -n {shlex.quote(conda_env)} "
+        f"python {shlex.quote(inference_script)} "
+        f"--load {shlex.quote(checkpoint)} "
+        f"--img_path {shlex.quote(staging_dir)} "
+        f"--class_list {shlex.quote(class_list)} "
+        f"--save_path {shlex.quote(raw_save_path)} "
+        f"--gpu {shlex.quote(selected_gpu)} "
+        f"--organ_mask_on_lesion"
+    )
+    print(f"[INFO] Running R-Super inference\n{full_cmd}")
+    try:
+        subprocess.run(
+            full_cmd, shell=True, executable="/bin/bash", check=True, cwd=rsuper_src,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+        )
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(
+            f"R-Super inference failed\nCommand: {full_cmd}\nExit code: {e.returncode}"
+        ) from e
+
+    combined_label_path = os.path.join(output_dir, "combined_labels.nii.gz")
+    _combine_medformer_masks(raw_save_path, bdmap_id, combined_label_path)
+
+    if not os.path.exists(combined_label_path):
+        raise RuntimeError(f"R-Super combined_labels not created at {combined_label_path}")
 
     return output_dir
 

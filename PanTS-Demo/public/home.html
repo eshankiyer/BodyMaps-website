@@ -1976,6 +1976,37 @@ section#recBar {           /* ⭐ 把 Browse 也拉進來一起對齊 */
 </style>
 
 
+    <!-- Inference Upload -->
+    <section class="panel container" id="inferenceSection" style="margin:12px auto;padding:20px 24px;max-width:520px;">
+      <div style="text-align:center;font-size:1.1rem;font-weight:700;margin-bottom:14px;color:var(--ink)">Run Inference on Your CT</div>
+      <!-- Drop zone -->
+      <div id="inferDropZone" style="border:2px dashed var(--sub);border-radius:12px;padding:28px 16px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;transition:border-color .2s,background .2s;background:rgba(255,255,255,0.03)">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" id="inferIcon" style="color:var(--sub)"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+        <span id="inferFileName" style="font-size:.85rem;color:var(--sub);text-align:center">Click or drag to upload<br><span style="font-size:.75rem;opacity:.7">.nii or .nii.gz</span></span>
+        <input id="inferFileInput" type="file" accept=".nii,.nii.gz" style="display:none">
+      </div>
+      <!-- Model + Run -->
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <select id="inferModelSelect" style="flex:1;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:.85rem;cursor:pointer">
+          <option value="" disabled selected>Select a model</option>
+          <option value="ePAI">ePAI</option>
+          <option value="SuPreM">SuPreM</option>
+          <option value="MedFormer">MedFormer</option>
+          <option value="R-Super">R-Super</option>
+          <option value="OpenVAE">OpenVAE</option>
+        </select>
+        <button id="inferRunBtn" disabled style="padding:8px 20px;border-radius:8px;font-size:.85rem;font-weight:700;border:none;background:var(--line);color:var(--sub);cursor:not-allowed;transition:background .2s,color .2s">Run</button>
+      </div>
+      <!-- Progress -->
+      <div id="inferProgress" style="display:none;margin-top:10px">
+        <div id="inferProgressLabel" style="font-size:.75rem;color:var(--sub);text-align:center;margin-bottom:4px"></div>
+        <div style="width:100%;height:6px;background:var(--line);border-radius:9999px;overflow:hidden">
+          <div id="inferProgressBar" style="height:100%;width:0;background:var(--brand);border-radius:9999px;transition:width .3s ease"></div>
+        </div>
+      </div>
+      <div id="inferError" style="display:none;font-size:.75rem;color:var(--bad);text-align:center;margin-top:8px"></div>
+    </section>
+
     <!-- Browse -->
     <section class="panel container recBar" id="recBar">
         <div class="recTitle">Browse</div>
@@ -3883,6 +3914,147 @@ document.getElementById('homeBtn')?.addEventListener('click', () => {
     // 若希望清除時回首頁 (可選)
     window.HAS_SEARCHED = false;
     if (typeof loadRandom === 'function') loadRandom();
+  });
+})();
+</script>
+
+<script>
+(function () {
+  const CHUNK_SIZE = 256 * 1024;
+  let selectedFile = null;
+  let selectedModel = '';
+  let pollTimer = null;
+
+  const dropZone   = document.getElementById('inferDropZone');
+  const fileInput  = document.getElementById('inferFileInput');
+  const fileName   = document.getElementById('inferFileName');
+  const icon       = document.getElementById('inferIcon');
+  const modelSel   = document.getElementById('inferModelSelect');
+  const runBtn     = document.getElementById('inferRunBtn');
+  const progressWrap = document.getElementById('inferProgress');
+  const progressBar  = document.getElementById('inferProgressBar');
+  const progressLbl  = document.getElementById('inferProgressLabel');
+  const errorDiv   = document.getElementById('inferError');
+
+  function setFile(file) {
+    if (!file || (!file.name.endsWith('.nii') && !file.name.endsWith('.nii.gz'))) return;
+    selectedFile = file;
+    fileName.textContent = file.name;
+    icon.style.color = 'var(--brand)';
+    dropZone.style.borderColor = 'var(--brand)';
+    dropZone.style.background = 'rgba(42,108,255,0.08)';
+    updateRunBtn();
+  }
+
+  function updateRunBtn() {
+    const can = !!selectedFile && !!selectedModel;
+    runBtn.disabled = !can;
+    runBtn.style.background = can ? 'var(--brand)' : 'var(--line)';
+    runBtn.style.color = can ? '#fff' : 'var(--sub)';
+    runBtn.style.cursor = can ? 'pointer' : 'not-allowed';
+  }
+
+  function setProgress(pct, label) {
+    progressWrap.style.display = 'block';
+    progressBar.style.width = pct + '%';
+    progressLbl.textContent = label;
+    errorDiv.style.display = 'none';
+  }
+
+  function showError(msg) {
+    errorDiv.textContent = msg;
+    errorDiv.style.display = 'block';
+    progressWrap.style.display = 'none';
+  }
+
+  function stopPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+  function startPolling(sid, model) {
+    stopPoll();
+    setProgress(5, 'Running ' + model + '… 5%');
+    pollTimer = setInterval(async () => {
+      try {
+        const res = await fetch(apiUrl + '/api/inference-status/' + sid);
+        const data = await res.json();
+        const status = (data.status || '').toLowerCase();
+        if (status === 'completed') {
+          setProgress(100, 'Done! Opening viewer…');
+          stopPoll();
+          setTimeout(() => {
+            if (model === 'OpenVAE') {
+              window.location.href = '/reconstruction/' + sid;
+            } else {
+              window.location.href = '/session/' + sid;
+            }
+          }, 600);
+        } else if (status === 'failed') {
+          showError('Inference failed: ' + (data.error || 'unknown error'));
+          stopPoll();
+          runBtn.disabled = false;
+          updateRunBtn();
+        } else {
+          const cur = parseInt(progressBar.style.width) || 5;
+          const next = Math.min(95, cur + 7);
+          setProgress(next, 'Running ' + model + '… ' + next + '%');
+        }
+      } catch {
+        const cur = parseInt(progressBar.style.width) || 5;
+        setProgress(Math.min(95, cur + 3), 'Running ' + model + '…');
+      }
+    }, 2500);
+  }
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = 'var(--brand)'; });
+  dropZone.addEventListener('dragleave', () => { if (!selectedFile) dropZone.style.borderColor = 'var(--sub)'; });
+  dropZone.addEventListener('drop', e => { e.preventDefault(); setFile(e.dataTransfer.files[0]); });
+  fileInput.addEventListener('change', e => setFile(e.target.files[0]));
+  modelSel.addEventListener('change', e => { selectedModel = e.target.value; updateRunBtn(); });
+
+  runBtn.addEventListener('click', async () => {
+    if (!selectedFile || !selectedModel) return;
+    runBtn.disabled = true;
+    runBtn.style.background = 'var(--line)';
+    runBtn.style.color = 'var(--sub)';
+    errorDiv.style.display = 'none';
+
+    const sid = crypto.randomUUID();
+    const totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
+
+    try {
+      setProgress(0, 'Uploading ' + selectedFile.name + '…');
+      for (let i = 0; i < totalChunks; i++) {
+        const chunk = selectedFile.slice(i * CHUNK_SIZE, Math.min((i + 1) * CHUNK_SIZE, selectedFile.size));
+        const fd = new FormData();
+        fd.append('session_id', sid);
+        fd.append('chunk_index', i.toString());
+        fd.append('total_chunks', totalChunks.toString());
+        fd.append('file', chunk);
+        const res = await fetch(apiUrl + '/api/upload-inference-chunk', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Chunk upload failed');
+        const pct = Math.round(((i + 1) / totalChunks) * 100);
+        setProgress(pct, 'Uploading… ' + pct + '%');
+      }
+
+      const finalFd = new URLSearchParams({ session_id: sid, total_chunks: totalChunks.toString(), output_filename: selectedFile.name });
+      const finalRes = await fetch(apiUrl + '/api/finalize-upload', { method: 'POST', body: finalFd });
+      const finalData = await finalRes.json();
+      if (!finalRes.ok) throw new Error(finalData.error || 'Finalize failed');
+
+      const inferFd = new FormData();
+      inferFd.append('session_id', sid);
+      inferFd.append('model_name', selectedModel);
+      inferFd.append('uploaded_filename', finalData.uploaded_filename || selectedFile.name);
+      const inferRes = await fetch(apiUrl + '/api/run-epai-inference', { method: 'POST', body: inferFd });
+      const inferData = await inferRes.json();
+      if (!inferRes.ok) throw new Error(inferData.error || 'Failed to start inference');
+
+      startPolling(sid, selectedModel);
+    } catch (err) {
+      showError('Error: ' + err.message);
+      updateRunBtn();
+    }
   });
 })();
 </script>
