@@ -10,7 +10,9 @@ export async function create3DVolume(canvasRef: React.RefObject<HTMLCanvasElemen
     sliceType: SLICE_TYPE.RENDER, 
   });
   nv.setInterpolation(true);
-
+  nv.onLocationChange = (data) => {
+    console.log(data)
+  }
   nv.mouseMove = (x: number, y: number): void => {
     x *= nv.uiData.dpr!
     y *= nv.uiData.dpr!
@@ -117,7 +119,9 @@ export async function create3DVolumeFew(canvasRef: React.RefObject<HTMLCanvasEle
     sliceType: SLICE_TYPE.RENDER, 
   });
   nv.setInterpolation(true);
-
+  nv.onClickToSegment = (data) => {
+    console.log(data)
+  }
   nv.mouseMove = (x: number, y: number): void => {
     x *= nv.uiData.dpr!
     y *= nv.uiData.dpr!
@@ -174,7 +178,8 @@ export async function create3DVolumeFew(canvasRef: React.RefObject<HTMLCanvasEle
   let i = 1;
   for (const rawLabelId in colorLUT) {
     const labelId = parseInt(rawLabelId);
-    if (!visibleIds.some(id => id === labelId)) continue;
+    if (!visibleIds.some(id => id+1 === labelId)) continue;
+    console.log(visibleIds)
     const color = colorLUT[rawLabelId];
     // if (!color || [color[0], color[1], color[2]].some(v => v === undefined)) {
     //   console.warn(`❗ Invalid color for label ${labelId}`);

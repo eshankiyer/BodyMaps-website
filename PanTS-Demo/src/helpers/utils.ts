@@ -1,3 +1,4 @@
+import type { Color } from "@cornerstonejs/core/types";
 import JSZip from "jszip";
 export const cleanName = (case_id: string) => {
     let new_id = case_id;
@@ -6,6 +7,33 @@ export const cleanName = (case_id: string) => {
         new_id = new_id.substring(1);
     }
     return new_id
+}
+
+function colorDistance(c1: number[], c2: number[]) {
+  let sum = 0;
+  for (let i = 0; i < 4; i++) {
+    const d = c1[i] - c2[i];
+    sum += d * d;
+  }
+  return Math.sqrt(sum);
+}
+
+export function closestColorIndex(
+  target: number[],
+  dict: { [key: number]: Color }
+): number {
+  let bestIndex = -1;
+  let bestDist = Infinity;
+
+  for (const key in dict) {
+    const dist = colorDistance(target, dict[key]);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestIndex = Number(key);
+    }
+  }
+
+  return bestIndex;
 }
 
 export function filenameToName(filename: string): string {

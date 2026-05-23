@@ -188,16 +188,16 @@ class NpzProcessor:
                 combined_labels = np.zeros_like(data, dtype=np.float64)
 
             matched = False
-            for substring, organ in keywords.items():
-                if substring.lower() in filename.lower():
-                    if keyword_dict[organ] is None:
-                        keyword_dict[organ] = np.zeros_like(data, dtype=np.float64)
-                    scaled = data * float(i + 1)
-                    keyword_dict[organ] = np.maximum(keyword_dict[organ], scaled)
-                    combined_labels = np.maximum(combined_labels, scaled)
-                    organ_intensities[organ] = i + 1
-                    matched = True
-                    break
+            # for substring, organ in keywords.items():
+            #     if substring.lower() in filename.lower():
+            #         if keyword_dict[organ] is None:
+            #             keyword_dict[organ] = np.zeros_like(data, dtype=np.float64)
+            #         scaled = data * float(i + 1)
+            #         keyword_dict[organ] = np.maximum(keyword_dict[organ], scaled)
+            #         combined_labels = np.maximum(combined_labels, scaled)
+            #         organ_intensities[organ] = i + 1
+            #         matched = True
+            #         break
 
             if not matched:
                 scaled = data * float(i + 1)

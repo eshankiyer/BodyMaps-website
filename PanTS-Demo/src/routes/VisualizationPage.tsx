@@ -6,7 +6,7 @@ import {
     IconDownload, IconHome, IconPointer, IconReport,
     IconSettings
 } from "@tabler/icons-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { useParams } from "react-router-dom";
 import RotatingModelLoader from "../components/Loading";
 import OpacitySlider from "../components/OpacitySlider/OpacitySlider";
@@ -19,7 +19,7 @@ import {
     renderVisualization,
     setToolGroupOpacity,
     setVisibilities,
-    toggleCrosshairTool,
+    toggleCrosshairTool
 } from "../helpers/CornerstoneNifti2";
 import { create3DVolume, create3DVolumeFew, updateVisibilities } from "../helpers/NiiVueNifti";
 import {
@@ -28,7 +28,7 @@ import {
     segmentation_categories,
     segmentation_category_colors,
 } from "../helpers/constants";
-import { filenameToName, getPanTSId } from "../helpers/utils";
+import { closestColorIndex, filenameToName, getPanTSId } from "../helpers/utils";
 import { type CheckBoxData, type LastClicked, type NColorMap } from "../types";
 import "./VisualizationPage.css";
 
@@ -60,7 +60,7 @@ function VisualizationPage() {
 	//   const [sliceSagittal, setSliceSagittal] = useState(0);
 	//   const [sliceCoronal, setSliceCoronal] = useState(0);
 	const [checkState, setCheckState] = useState<boolean[]>([true]);
-		useState<string[] | null>(null);
+	useState<string[] | null>(null);
 	const [NV, setNV] = useState<Niivue | undefined>();
 	const [sessionKey, _setSessionKey] = useState<string | undefined>(undefined);
 	const [checkBoxData, setCheckBoxData] = useState<CheckBoxData[]>([]);
@@ -84,10 +84,55 @@ function VisualizationPage() {
 	const [zoomMode, setZoomMode] = useState(false);
 	const [zoomLevel, setZoomLevel] = useState(1);
 	const [crosshairToolActive, setCrosshairToolActive] = useState(true);
+	const [tooltip, setToolTip] = useState({
+		visible: false,	
+		x: 0,
+		y: 0,
+		text: "",
+	});
 
 	// const location = useLocation();
+	const handleCanvasClick = (e: MouseEvent<HTMLCanvasElement>) => {
+		if (!render_ref || !render_ref.current) return;
+		const canvas = render_ref.current;
 
+		const rect = canvas.getBoundingClientRect();
+
+		const x = e.clientX - rect.left;
+		const y = e.clientY - rect.top;
+
+		const scaleX = canvas.width / rect.width;
+		const scaleY = canvas.height / rect.height;
+
+		const cx = Math.floor(x * scaleX);
+		const cy = Math.floor(y * scaleY);
+
+		const gl = canvas.getContext("webgl2");
+		if (!gl) return;
+		const pixels = new Uint8Array(4);
+		gl.readPixels(cx, canvas.height - cy, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+		// get closest 
+		console.log(pixels[0], pixels[1], pixels[2], pixels[3])
+		const index = closestColorIndex([...pixels], labelColorMap);
+		const label = segmentation_categories[index - 1]
+		if (pixels[0] === 0 && pixels[1] === 0 && pixels[2] === 0) {
+			setToolTip({
+				visible: false,
+				x: 0,
+				y: 0,
+				text: "",
+			})
+			return;
+		}
+		setToolTip({
+			visible: false,
+			x: e.clientX + 10,
+			y: e.clientY + 10,
+			text: label
+		})
+	}
 	// Load and render visualization on first render
+
 	useEffect(() => {
 		toggleCrosshairTool(crosshairToolActive);
 	}, [crosshairToolActive]);
@@ -222,9 +267,9 @@ function VisualizationPage() {
 			const actor = viewport.getDefaultActor();
 
 			const tf = (actor.actor.getProperty() as vtkVolumeProperty).getRGBTransferFunction(0);
-						tf.setMappingRange(windowLow, windowHigh);
-						tf.updateRange();
-						viewport.render();
+			tf.setMappingRange(windowLow, windowHigh);
+			tf.updateRange();
+			viewport.render();
 		});
 	};
 
@@ -242,15 +287,16 @@ function VisualizationPage() {
 				true, // ID=0 background 永远可见
 				...checkBoxData.map((item) => !!checkState[item.id]),
 			];
-			const visible = checkStateArr.map((item, idx) => item === true ? idx-1 : null).filter((item) => item !== null);
-			if (visible.length === 3) {
+			const visible = checkStateArr.map((item, idx) => item === true ? idx - 1 : null).filter((item) => item !== null);
+			if (visible.length !== checkBoxData.length+1 && visible.length !== 1) {
 				visible.splice(0, 1);
 				console.log(visible.map((item) => segmentation_categories[item]));
 				create3DVolumeFew(render_ref, labelColorMap, getPanTSId(pantsCase ?? "1"), visible);
-				return;
+			}
+			else {
+				updateVisibilities(NV, checkStateArr, sessionKey, cmapRef.current);
 			}
 			setVisibilities(checkStateArr);
-			updateVisibilities(NV, checkStateArr, sessionKey, cmapRef.current);
 		}
 	}, [
 		checkState,
@@ -324,19 +370,18 @@ function VisualizationPage() {
 								{/* {showTaskDetails ? "Settings" : "Settings"} */}
 							</div>
 							{/* {showTaskDetails ? ( */}
-								<div
-									className={`hover:bg-gray-700 z-4 cursor-pointer bg-[#0f0824] p-2 ml-4 mt-4 rounded-lg w-fit`}
-									onClick={() => navBack()}
-								>
-									<IconHome color="white" />
-									{/* {showTaskDetails ? "Settings" : "Settings"} */}
-								</div>
+							<div
+								className={`hover:bg-gray-700 z-4 cursor-pointer bg-[#0f0824] p-2 ml-4 mt-4 rounded-lg w-fit`}
+								onClick={() => navBack()}
+							>
+								<IconHome color="white" />
+								{/* {showTaskDetails ? "Settings" : "Settings"} */}
+							</div>
 							{/* ) : null} */}
 						</div>
 						<div
-							className={`text-black bg-[#0f0824] z-3 rounded-lg w-64 h-dvh p-4 pt-14 gap-3 flex flex-col absolute top-0 left-0 transition-all duration-300 ease-in-out origin-left ${
-								showTaskDetails ? "translate-x-[-64rem]" : "translate-x-0"
-							}`}
+							className={`text-black bg-[#0f0824] z-3 rounded-lg w-64 h-dvh p-4 pt-14 gap-3 flex flex-col absolute top-0 left-0 transition-all duration-300 ease-in-out origin-left ${showTaskDetails ? "translate-x-[-64rem]" : "translate-x-0"
+								}`}
 						>
 							{/* Toggle dropdown */}
 
@@ -344,49 +389,48 @@ function VisualizationPage() {
 								<>
 									<div className="grid grid-cols-6 items-center justify-center">
 										<div>
-										
+
 										</div>
 										{zoomMode ? null : (
-											
+
 											<div className="text-white font-bold text-xl col-span-4">{`Case: ${displayId}`}</div>
 										)}
 										<div></div>
 									</div>
 
-										<>
-											<OpacitySlider
-												opacityValue={opacityValue}
-												handleOpacityOnSliderChange={
-													handleOpacityOnSliderChange
-												}
-												handleOpacityOnFormSubmit={handleOpacityOnFormSubmit}
-												setShowOrganDetails={setShowOrganDetails}
-												setShowTaskDetails={setShowTaskDetails}
-											/>
+									<>
+										<OpacitySlider
+											opacityValue={opacityValue}
+											handleOpacityOnSliderChange={
+												handleOpacityOnSliderChange
+											}
+											handleOpacityOnFormSubmit={handleOpacityOnFormSubmit}
+											setShowOrganDetails={setShowOrganDetails}
+											setShowTaskDetails={setShowTaskDetails}
+										/>
 
-											<WindowingSlider
-												windowWidth={windowWidth}
-												windowCenter={windowCenter}
-												onWindowChange={handleWindowChange}
-											/>
-											<ZoomHandle
+										<WindowingSlider
+											windowWidth={windowWidth}
+											windowCenter={windowCenter}
+											onWindowChange={handleWindowChange}
+										/>
+										<ZoomHandle
 											submitted={zoomLevel}
 											setSubmitted={setZoomLevel}
 											setZoomMode={setZoomMode}
 										/>
-										</>
-									
+									</>
+
 									{/* Report Download Zoom Buttons */}
 									{/* Opacity & Windowing Sliders */}
 									{/* {!zoomMode ? ( */}
-										<>
-										
-											<div className="flex gap-3 items-center justify-center">
-												<div
-													className={`group cursor-pointer rounded-md relative border `}
-												>
-													<div className={`border-gray-500 hover:bg-gray-700 border rounded-md p-2 ${
-														crosshairToolActive ? "bg-gray-700" : ""
+									<>
+
+										<div className="flex gap-3 items-center justify-center">
+											<div
+												className={`group cursor-pointer rounded-md relative border `}
+											>
+												<div className={`border-gray-500 hover:bg-gray-700 border rounded-md p-2 ${crosshairToolActive ? "bg-gray-700" : ""
 													}`}>
 
 													<IconPointer
@@ -394,13 +438,13 @@ function VisualizationPage() {
 														onClick={() =>
 															setCrosshairToolActive((prev) => !prev)
 														}
-														></IconPointer>
-													</div>
-													<span className="transition-all pointer-events-none duration-100 scale-0 group-hover:scale-100 absolute top-0 left-12 z-1 bg-gray-900 text-white rounded-md p-2">
-														Crosshair Mode
-													</span>
+													></IconPointer>
 												</div>
-												{/* <div className="group cursor-pointer rounded-md relative">
+												<span className="transition-all pointer-events-none duration-100 scale-0 group-hover:scale-100 absolute top-0 left-12 z-1 bg-gray-900 text-white rounded-md p-2">
+													Crosshair Mode
+												</span>
+											</div>
+											{/* <div className="group cursor-pointer rounded-md relative">
 													{!zoomMode ? (
 														<>
 															<div className="border-gray-500 hover:bg-gray-700 border rounded-md p-2">
@@ -417,28 +461,28 @@ function VisualizationPage() {
 													) : null }
 												</div> */}
 
-												<div className="group cursor-pointer rounded-md relative">
-													<div className="border-gray-500 hover:bg-gray-700 border rounded-md p-2">
+											<div className="group cursor-pointer rounded-md relative">
+												<div className="border-gray-500 hover:bg-gray-700 border rounded-md p-2">
 
 													<IconDownload
 														onClick={handleDownloadClick}
 														className="w-6 h-6 text-white relative"
-														></IconDownload>
-													</div>
-													<span className="transition-all pointer-events-none duration-100 scale-0 group-hover:scale-100 absolute top-0 left-12 z-1 bg-gray-900 text-white rounded-md p-2">
-														Download
-													</span>
+													></IconDownload>
 												</div>
-												<div className="group cursor-pointer rounded-md relative">
-													<div className="border-gray-500 hover:bg-gray-700 border rounded-md p-2">
-													<IconReport className="w-6 h-6 text-white relative"></IconReport>
-													</div>
-													<span className="transition-all pointer-events-none duration-100 scale-0 group-hover:scale-100 absolute top-0 left-12 z-1 bg-gray-900 text-white rounded-md p-2">
-														Report
-													</span>
-												</div>
+												<span className="transition-all pointer-events-none duration-100 scale-0 group-hover:scale-100 absolute top-0 left-12 z-1 bg-gray-900 text-white rounded-md p-2">
+													Download
+												</span>
 											</div>
-										</>
+											<div className="group cursor-pointer rounded-md relative">
+												<div className="border-gray-500 hover:bg-gray-700 border rounded-md p-2">
+													<IconReport className="w-6 h-6 text-white relative"></IconReport>
+												</div>
+												<span className="transition-all pointer-events-none duration-100 scale-0 group-hover:scale-100 absolute top-0 left-12 z-1 bg-gray-900 text-white rounded-md p-2">
+													Report
+												</span>
+											</div>
+										</div>
+									</>
 									{/* ) : null} */}
 								</>
 							)}
@@ -477,7 +521,7 @@ function VisualizationPage() {
 					style={{ overflow: "hidden" }}
 				>
 					<div
-						className={`axial ${loading ? "" : "border-b-4 border-r-4 border-t-4 border-l-4 border-red-900"}`}
+						className={`axial ${loading ? "" : "border-b-4 border-r-4 border-t-4 border-l-4 border-red-500"}`}
 						ref={axial_ref}
 						onMouseDown={(e) =>
 							setLastClicked({
@@ -490,13 +534,13 @@ function VisualizationPage() {
 								),
 							})
 						}
-						// onScroll={() => {
-						// 	const progress = getSlicePercent("CT_NIFTI_AXIAL");
-						// 	if (axialSliceProgress !== progress) setAxialSliceProgress(progress);
-						// }}
+					// onScroll={() => {
+					// 	const progress = getSlicePercent("CT_NIFTI_AXIAL");
+					// 	if (axialSliceProgress !== progress) setAxialSliceProgress(progress);
+					// }}
 					></div>
 					<div
-						className={`sagittal ${loading ? "" : "border-b-4 border-r-4 border-t-4 border-l-4 border-yellow-700"}`}
+						className={`sagittal ${loading ? "" : "border-b-4 border-r-4 border-t-4 border-l-4 border-yellow-500"}`}
 						ref={sagittal_ref}
 						onMouseDown={(e) =>
 							setLastClicked({
@@ -512,7 +556,7 @@ function VisualizationPage() {
 					></div>
 
 					<div
-						className={`coronal ${loading ? "" : "border-b-4 border-r-4 border-t-4 border-l-4 border-green-800"}`}
+						className={`coronal ${loading ? "" : "border-b-4 border-r-4 border-t-4 border-l-4 border-green-500"}`}
 						ref={coronal_ref}
 						onMouseDown={(e) =>
 							setLastClicked({
@@ -529,7 +573,32 @@ function VisualizationPage() {
 
 					<div className={`render`}>
 						<div className="canvas">
-							<canvas ref={render_ref}></canvas>
+							<canvas
+								ref={render_ref}
+								onClick={(e) => handleCanvasClick(e)}
+							// width={800} 
+							// height={800} 
+							// style={{ width: "100%", height: "100%" }}
+							>
+							</canvas>
+							{tooltip.visible && (
+								<div
+									style={{
+										position: "fixed",
+										top: tooltip.y,
+										left: tooltip.x,
+										background: "rgba(0,0,0,0.8)",
+										color: "white",
+										padding: "4px 8px",
+										borderRadius: "4px",
+										fontSize: "12px",
+										pointerEvents: "none",
+										zIndex: 9999,
+									}}
+								>
+									{tooltip.text}
+								</div>
+							)}
 						</div>
 					</div>
 				</div>
@@ -547,13 +616,15 @@ function VisualizationPage() {
 				labelColorMap={labelColorMap}
 			/>
 
-			{showReportScreen && (
-				<ReportScreen
-					id={displayId}
-					onClose={() => setShowReportScreen(false)}
-				/>
-			)}
-		</div>
+			{
+				showReportScreen && (
+					<ReportScreen
+						id={displayId}
+						onClose={() => setShowReportScreen(false)}
+					/>
+				)
+			}
+		</div >
 	);
 }
 

@@ -395,7 +395,7 @@ async def get_specific_segmentations(combined_labels_id):
     try: 
         organs = json.loads(request.form["organs"])
         niftiProcessor = NpzProcessor()
-        combined_labels, intensities, affine, header = niftiProcessor.nifti_combine_labels(int(combined_labels_id), {}, save=False, organs=organs)
+        combined_labels, intensities, affine, header = niftiProcessor.nifti_combine_labels(int(combined_labels_id), {"foo": "bar"}, save=False, organs=organs)
         if combined_labels.dtype != np.uint8:
             data_uint8 = combined_labels.astype(np.uint8)
             new_img = nib.Nifti1Image(data_uint8, affine, header=header)
@@ -413,7 +413,6 @@ async def get_specific_segmentations(combined_labels_id):
         
         response = send_file(buffer, as_attachment=True, download_name="combined_specific_labels.nii.gz", mimetype="application/gzip")
         response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
-        response.headers['Content-Encoding'] = 'gzip'
         return response
     except Exception as e: 
         return jsonify({"error": f"Error loading organ metrics: {str(e)}"}), 500
