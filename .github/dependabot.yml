@@ -1,25 +1,44 @@
 version: 2
 updates:
-  # Frontend npm dependencies
+  # Frontend npm dependencies — grouped into a single PR to cut noise.
   - package-ecosystem: npm
     directory: /PanTS-Demo
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
-      dev-dependencies:
-        dependency-type: development
+      npm-dependencies:
+        patterns: ["*"]
+    ignore:
+      # Core imaging / 3D libs: major bumps risk breaking the CT viewer and we
+      # have no viewer-interaction tests yet. Update these deliberately, by hand.
+      - dependency-name: "@niivue/niivue"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@cornerstonejs/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "three"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@kitware/vtk.js"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@react-three/*"
+        update-types: ["version-update:semver-major"]
 
-  # Backend Python dependencies
+  # Backend Python dependencies — grouped into a single PR.
   - package-ecosystem: pip
     directory: /flask-server
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      pip-dependencies:
+        patterns: ["*"]
 
-  # GitHub Actions used by the workflows
+  # GitHub Actions used by the workflows — grouped into a single PR.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns: ["*"]
