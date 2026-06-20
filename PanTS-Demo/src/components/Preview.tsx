@@ -25,11 +25,15 @@ export default function Preview({ id, previewMetadata }: Props) {
 	if (!previewMetadata) return null;
 
 	const caseIdStr = `PanTS_${id.toString().padStart(8, "0")}`;
-	const hfThumbUrl = `https://huggingface.co/datasets/BodyMaps/iPanTSMini/resolve/main/profile_only/${caseIdStr}/profile.jpg`;
+	// HuggingFace fallback, routed through the backend's same-origin proxy. A *direct*
+	// cross-origin image is blocked by the viewer's COEP: require-corp header (which is
+	// why thumbnails went missing); the proxy keeps it same-origin, matching home.html.
+	const hfProfileUrl = `https://huggingface.co/datasets/BodyMaps/iPanTSMini/resolve/main/profile_only/${caseIdStr}/profile.jpg`;
+	const proxyThumbUrl = `${API_BASE}/api/proxy-image?url=${encodeURIComponent(hfProfileUrl)}`;
 
 	const handleImgError = () => {
-		if (thumbUrl !== hfThumbUrl) {
-			setThumbUrl(hfThumbUrl); // local failed — retry via HuggingFace
+		if (thumbUrl !== proxyThumbUrl) {
+			setThumbUrl(proxyThumbUrl); // local failed — retry via the same-origin HF proxy
 		} else {
 			setImgError(true); // both sources failed
 		}
