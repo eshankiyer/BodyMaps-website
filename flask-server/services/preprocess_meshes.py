@@ -8,6 +8,7 @@ import nibabel as nib
 import numpy as np
 from skimage import measure
 import trimesh
+import argparse
 
 from constants import Constants
 from utils import *
@@ -182,6 +183,13 @@ def export_organ_mesh(
         "faces": int(len(mesh.faces)),
     }
 
+def get_panTS_id(index: int):
+    cur_case_id = str(index)
+    iter = max(0, 8 - len(str(index)))
+    for _ in range(iter):
+        cur_case_id = "0" + cur_case_id
+    cur_case_id = "PanTS_" + cur_case_id    
+    return cur_case_id
 
 # display_id: PanTS_00000900
 def preprocess_case(display_id: str, label_nifti_path: str, output_root: str):
@@ -246,22 +254,79 @@ def preprocess_case(display_id: str, label_nifti_path: str, output_root: str):
 
     print(f"Wrote manifest -> {manifest_path}")
 
-def get_panTS_id(index):
-    cur_case_id = str(index)
-    iter = max(0, 8 - len(str(index)))
-    for _ in range(iter):
-        cur_case_id = "0" + cur_case_id
-    cur_case_id = "PanTS_" + cur_case_id    
-    return cur_case_id
+def preprocess_case_by_index(index: int, skip_existing: bool = False):
+    pants_case = get_panTS_id(index)
 
-if __name__ == "__main__":
-    combined_labels_id = 900
-    pants_case = get_panTS_id(combined_labels_id)
-    subfolder = "LabelTr" if int(combined_labels_id) < 9000 else "LabelTe" 
-    nifti_path = f"{Constants.PANTS_PATH}/data/{subfolder}/{pants_case}/{Constants.COMBINED_LABELS_NIFTI_FILENAME}"
+    subfolder = "LabelTr" if index < 9000 else "LabelTe"
+
+    nifti_path = (
+        f"{Constants.PANTS_PATH}/data/{subfolder}/"
+        f"{pants_case}/{Constants.COMBINED_LABELS_NIFTI_FILENAME}"
+    )
+
     output_path = f"{Constants.PANTS_PATH}/data/meshes/{pants_case}/"
+    manifest_path = Path(output_path) / "manifest.json"
+
+    if skip_existing and manifest_path.exists():
+        print(f"[SKIP] {pants_case} already has manifest.json")
+        return
+
+    if not Path(nifti_path).exists():
+        print(f"[MISSING] {pants_case}: {nifti_path}")
+        return
+
+    print(f"[START] {pants_case}")
+    print(f"  input:  {nifti_path}")
+    print(f"  output: {output_path}")
+
     preprocess_case(
         display_id=pants_case,
         label_nifti_path=nifti_path,
         output_root=output_path,
     )
+
+    print(f"[DONE] {pants_case}")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Preprocess PanTS label NIfTI into GLB organ meshes.")
+
+    parser.add_argument(
+        "--case",
+        type=int,
+        help="Single PanTS case index, e.g. 900 for PanTS_00000900",
+    )
+
+    parser.add_argument(
+        "--start",
+        type=int,
+        help="Start case index for batch preprocessing, inclusive.",
+    )
+
+    parser.add_argument(
+        "--end",
+        type=int,
+        help="End case index for batch preprocessing, inclusive.",
+    )
+
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Regenerate even if manifest.json already exists.",
+    )
+
+    args = parser.parse_args()
+
+    skip_existing = not args.force
+
+    if args.case is not None:
+        preprocess_case_by_index(args.case, skip_existing=skip_existing)
+
+    elif args.start is not None and args.end is not None:
+        for index in range(args.start, args.end + 1):
+            try:
+                preprocess_case_by_index(index, skip_existing=skip_existing)
+            except Exception as e:
+                print(f"[ERROR] PanTS_{index:08d}: {e}")
+
+    else:
+        raise SystemExit("Use either --case 900 or --start 1 --end 9901")

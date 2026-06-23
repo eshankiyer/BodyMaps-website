@@ -5,7 +5,6 @@ import { AnnotationProvider } from "./contexts/annotationContexts";
 import { FileProvider } from "./contexts/fileContexts";
 import LandingPage from "./pages/LandingPage";
 import Homepage from "./routes/Homepage";
-import SegmentationMeshViewer from "./routes/MeshViewer";
 
 // The viewer routes pull in the WebGL stack (NiiVue + Cornerstone + three.js), which
 // is the bulk of the JS bundle. Code-split them so the landing + dataset pages don't
@@ -58,7 +57,6 @@ function App() {
 							<Route path="/session/:sessionId" element={<VisualizationPage />} />
 							<Route path="/reconstruction/:reconstructionId" element={<VisualizationPage />} />
 							<Route path="/upload" element={<UploadPage />} />
-							<Route path="/mesh" element={<SegmentationMeshViewer caseId="900" />} />
 						</Routes>
 					</BrowserRouter>
 				</div>

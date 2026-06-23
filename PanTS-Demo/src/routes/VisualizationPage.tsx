@@ -159,7 +159,7 @@ function VisualizationPage() {
 	const [viewMode, setViewMode] = useState<ViewMode>("mpr");
 	const [activePreset, setActivePreset] = useState<string>("Soft Tissue");
 	const [tooltip, setToolTip] = useState({
-		visible: false,	
+		visible: false,
 		x: 0,
 		y: 0,
 		text: "",
@@ -174,14 +174,14 @@ function VisualizationPage() {
 
 	useEffect(() => {
 		const unsubscribe = subscribeToCrosshairChanges((mm) => {
-            setCrosshairMm([
-                mm[0],
-                mm[1],
-                mm[2],
-            ]);
-        });
+			setCrosshairMm([
+				mm[0],
+				mm[1],
+				mm[2],
+			]);
+		});
 
-        return unsubscribe;
+		return unsubscribe;
 	}, [])
 
 	// Track the CT download to show an accurate ETA while the case loads. We follow the
@@ -247,11 +247,10 @@ function VisualizationPage() {
 				!coronal_ref.current ||
 				// !render_ref.current ||
 				cmap.length === 0
-			)
-				{
-					console.log("return", ctUrl, segUrl);
-					return;
-				}
+			) {
+				console.log("return", ctUrl, segUrl);
+				return;
+			}
 
 			const result = await renderVisualization(
 				axial_ref.current,
@@ -508,7 +507,7 @@ function VisualizationPage() {
 			})
 			return;
 		};
-		const label = segmentation_categories[idx-1];
+		const label = segmentation_categories[idx - 1];
 		setToolTip({
 			visible: true,
 			x: e.clientX + 10,
@@ -586,48 +585,48 @@ function VisualizationPage() {
 
 									<>
 										{/* View mode */}
-									<div className="vp-panel">
-										<div className="vp-panel__title">View</div>
-										<div className="vp-seg">
-											{([
-												{ mode: "mpr" as ViewMode, label: "⊞ MPR" },
-												{ mode: "axial" as ViewMode, label: "Axial" },
-												{ mode: "sagittal" as ViewMode, label: "Sag" },
-												{ mode: "coronal" as ViewMode, label: "Cor" },
-												{ mode: "3d" as ViewMode, label: "3D" },
-											]).map(({ mode, label }) => (
-												<button
-													key={mode}
-													onClick={() => setViewMode(mode)}
-													className={`vp-seg__btn ${viewMode === mode ? "vp-seg__btn--active" : ""}`}
-												>{label}</button>
-											))}
+										<div className="vp-panel">
+											<div className="vp-panel__title">View</div>
+											<div className="vp-seg">
+												{([
+													{ mode: "mpr" as ViewMode, label: "⊞ MPR" },
+													{ mode: "axial" as ViewMode, label: "Axial" },
+													{ mode: "sagittal" as ViewMode, label: "Sag" },
+													{ mode: "coronal" as ViewMode, label: "Cor" },
+													{ mode: "3d" as ViewMode, label: "3D" },
+												]).map(({ mode, label }) => (
+													<button
+														key={mode}
+														onClick={() => setViewMode(mode)}
+														className={`vp-seg__btn ${viewMode === mode ? "vp-seg__btn--active" : ""}`}
+													>{label}</button>
+												))}
+											</div>
 										</div>
-									</div>
 
-									{/* CT Window presets */}
-									<div className="vp-panel">
-										<div className="vp-panel__title">CT Window</div>
-										<div className="vp-seg">
-											{CT_PRESETS.map((preset) => (
-												<button
-													key={preset.name}
-													onClick={() => handlePresetClick(preset)}
-													className={`vp-seg__btn ${activePreset === preset.name ? "vp-seg__btn--active" : ""}`}
-												>{preset.name}</button>
-											))}
+										{/* CT Window presets */}
+										<div className="vp-panel">
+											<div className="vp-panel__title">CT Window</div>
+											<div className="vp-seg">
+												{CT_PRESETS.map((preset) => (
+													<button
+														key={preset.name}
+														onClick={() => handlePresetClick(preset)}
+														className={`vp-seg__btn ${activePreset === preset.name ? "vp-seg__btn--active" : ""}`}
+													>{preset.name}</button>
+												))}
+											</div>
 										</div>
-									</div>
 
-									<OpacitySlider
-										opacityValue={opacityValue}
-										handleOpacityOnSliderChange={
-											handleOpacityOnSliderChange
-										}
-										handleOpacityOnFormSubmit={handleOpacityOnFormSubmit}
-										setShowOrganDetails={setShowOrganDetails}
-										setShowTaskDetails={setShowTaskDetails}
-									/>
+										<OpacitySlider
+											opacityValue={opacityValue}
+											handleOpacityOnSliderChange={
+												handleOpacityOnSliderChange
+											}
+											handleOpacityOnFormSubmit={handleOpacityOnFormSubmit}
+											setShowOrganDetails={setShowOrganDetails}
+											setShowTaskDetails={setShowTaskDetails}
+										/>
 
 										<WindowingSlider
 											windowWidth={windowWidth}
