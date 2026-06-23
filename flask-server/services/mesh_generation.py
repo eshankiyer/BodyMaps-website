@@ -200,7 +200,7 @@ def generate_mesh_manifest(
                 "id": key,
                 "key": meta["key"],
                 "name": meta["name"],
-                "url": f"{os.getenv('API_ORIGIN', 'http://localhost:5001')}/api/cases/{case_id}/meshes/{filename}",
+                "url": f"{os.getenv('API_ORIGIN', 'http://localhost:5001')}/api/cases/{case_id}/render_only/{filename}",
             }
         )
 

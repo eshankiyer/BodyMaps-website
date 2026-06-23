@@ -241,7 +241,7 @@ def preprocess_case(display_id: str, label_nifti_path: str, output_root: str):
                 "id": label_id,
                 "key": meta["key"],
                 "name": meta["name"],
-                "url": f"{os.getenv('API_ORIGIN', 'http://localhost:5001')}/api/cases/{display_id}/meshes/{out_name}",
+                "url": f"{os.getenv('API_ORIGIN', 'http://localhost:5001')}/api/cases/{display_id}/render_only/{out_name}",
                 "vertices": stats["vertices"],
                 "faces": stats["faces"],
             }
@@ -257,14 +257,12 @@ def preprocess_case(display_id: str, label_nifti_path: str, output_root: str):
 def preprocess_case_by_index(index: int, skip_existing: bool = False):
     pants_case = get_panTS_id(index)
 
-    subfolder = "LabelTr" if index < 9000 else "LabelTe"
-
     nifti_path = (
-        f"{Constants.PANTS_PATH}/data/{subfolder}/"
+        f"{Constants.PANTS_PATH}/mask_only/"
         f"{pants_case}/{Constants.COMBINED_LABELS_NIFTI_FILENAME}"
     )
 
-    output_path = f"{Constants.PANTS_PATH}/data/meshes/{pants_case}/"
+    output_path = f"{Constants.PANTS_PATH}/render_only/{pants_case}/"
     manifest_path = Path(output_path) / "manifest.json"
 
     if skip_existing and manifest_path.exists():

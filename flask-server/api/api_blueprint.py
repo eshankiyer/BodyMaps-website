@@ -179,18 +179,9 @@ def get_preview(clabel_ids):
 # if not preloaded
 @api_blueprint.route('/get_image_preview/<clabel_id>', methods=['GET'])
 def get_image_preview(clabel_id):
-    # get age and thumbnail
-    # subfolder = "LabelTr" if int(clabel_id) < 9000 else "LabelTe"
-    subfolder = "ProfileTr" if int(clabel_id) < 9000 else "ProfileTe"
-    # path = os.path.join(Constants.PANTS_PATH, "data", subfolder, get_panTS_id(clabel_id), Constants.COMBINED_LABELS_FILENAME)
-    # if not os.path.exists(path):
-    #     print(f"File not found: {path}. Making file")
-    #     npz_processor = NpzProcessor()
-    #     npz_processor.combine_labels(int(clabel_id))
-
-    path = os.path.join(Constants.PANTS_PATH, subfolder, get_panTS_id(clabel_id), "profile.jpg")
-    # arr = np.load(path)["data"]
-    # bytes = volume_to_png(arr)
+    path = os.path.join(Constants.PANTS_PATH, "profile_only", get_panTS_id(clabel_id), "profile.jpg")
+    if not os.path.exists(path):
+        return jsonify({"error": f"File not found: {path} "}), 404
     return send_file(
         path,
         mimetype="image/jpg",   
@@ -211,7 +202,7 @@ def get_mesh_manifest(case_id):
 
     return jsonify(manifest)
 
-@api_blueprint.route("/cases/<display_id>/meshes/<filename>")
+@api_blueprint.route("/cases/<display_id>/render_only/<filename>")
 def get_mesh_file(display_id, filename):
     mesh_path = os.path.join(Constants.MESH_PATH, display_id, filename)
     try:
@@ -229,15 +220,9 @@ def get_mesh_file(display_id, filename):
 
 @api_blueprint.route('/get-label-colormap/<clabel_id>', methods=['GET'])
 def get_label_colormap(clabel_id):
-    subfolder = "LabelTr" if int(clabel_id) < 9000 else "LabelTe"
     
-    clabel_path = os.path.join(Constants.PANTS_PATH, "data", subfolder, get_panTS_id(int(clabel_id)),  'combined_labels.nii.gz')
+    clabel_path = os.path.join(Constants.PANTS_PATH, "mask_only", get_panTS_id(int(clabel_id)),  'combined_labels.nii.gz')
 
-    if not os.path.exists(clabel_path):
-        print(f"File not found: {clabel_path}. Making file")
-        combine_label_npz(int(clabel_id))
-        npzProcessor = NpzProcessor()
-        npzProcessor.npz_to_nifti(int(clabel_id))
     try:
         clabel_array = nib.load(clabel_path)
         clabel_array = clabel_array.get_fdata()
@@ -326,8 +311,7 @@ def get_mask_data():
   
 @api_blueprint.route('/get-main-nifti/<clabel_id>', methods=['GET'])
 def get_main_nifti(clabel_id):
-    subfolder = "ImageTr" if int(clabel_id) < 9000 else "ImageTe"
-    case_dir = f"{Constants.PANTS_PATH}/data/{subfolder}/{get_panTS_id(clabel_id)}"
+    case_dir = f"{Constants.PANTS_PATH}/image_only/{get_panTS_id(clabel_id)}"
     main_nifti_path = f"{case_dir}/{Constants.MAIN_NIFTI_FILENAME}"
 
     # ?res=low → serve the precomputed low-res copy when present (much smaller/faster
@@ -366,22 +350,11 @@ def get_report(id):
         except Exception as e:
             return jsonify({"error": f"Error loading organ metrics: {str(e)}"}), 500
 
-        subfolder = "ImageTr" if int(id) < 9000 else "ImageTe"
-        label_subfolder = "LabelTr" if int(id) < 9000 else "LabelTe"
 
         base_path = f"{SESSIONS_DIR}/{id}"
-        ct_path = f"{Constants.PANTS_PATH}/data/{subfolder}/{get_panTS_id(id)}/{Constants.MAIN_NIFTI_FILENAME}"
-        masks = f"{Constants.PANTS_PATH}/data/{label_subfolder}/{get_panTS_id(id)}/{Constants.COMBINED_LABELS_NIFTI_FILENAME}"
+        ct_path = f"{Constants.PANTS_PATH}/image_only/{get_panTS_id(id)}/{Constants.MAIN_NIFTI_FILENAME}"
+        masks = f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(id)}/{Constants.COMBINED_LABELS_NIFTI_FILENAME}"
         
-        npz_processor = NpzProcessor()
-
-        # if (not os.path.exists(ct_path)):
-        #     npz_processor.npz_to_nifti(int(id), combined_label=False, save=True)
-
-        if (not os.path.exists(masks)): 
-            npz_processor.combine_labels(int(id), keywords={"pancrea": "pancreas"}, save=True)
-            npz_processor.npz_to_nifti(int(id), combined_label=True, save=True)
-            
         template_pdf = os.getenv("TEMPLATE_PATH", "report_template_3.pdf")
 
         extracted_data = None
@@ -450,8 +423,7 @@ async def get_specific_segmentations(combined_labels_id):
         return jsonify({"error": f"Error loading organ metrics: {str(e)}"}), 500
 @api_blueprint.route('/get-segmentations/<combined_labels_id>', methods=['GET'])
 async def get_segmentations(combined_labels_id):
-    subfolder = "LabelTr" if int(combined_labels_id) < 9000 else "LabelTe"
-    nifti_path = f"{Constants.PANTS_PATH}/data/{subfolder}/{get_panTS_id(combined_labels_id)}/{Constants.COMBINED_LABELS_NIFTI_FILENAME}"
+    nifti_path = f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(combined_labels_id)}/{Constants.COMBINED_LABELS_NIFTI_FILENAME}"
     labels = list(Constants.PREDEFINED_LABELS.values())
 
     # ?res=low → serve the precomputed low-res mask (paired with the low-res CT so the
@@ -505,8 +477,7 @@ async def get_segmentations(combined_labels_id):
 @api_blueprint.route('/download/<id>', methods=['GET'])
 def download_segmentation_zip(id):
     try:
-        subfolder = "LabelTr" if int(id) < 9000 else "LabelTe"
-        outputs_ct_folder = Path(f"{Constants.PANTS_PATH}/data/{subfolder}/{get_panTS_id(id)}/segmentations")
+        outputs_ct_folder = Path(f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(id)}/segmentations")
         
         if not os.path.exists(outputs_ct_folder):
             return jsonify({"error": "Outputs/ct folder not found"}), 404

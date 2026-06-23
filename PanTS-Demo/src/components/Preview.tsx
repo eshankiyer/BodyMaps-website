@@ -29,8 +29,8 @@ export default function Preview({ id, previewMetadata }: Props) {
 	// cross-origin image is blocked by the viewer's COEP: require-corp header (which is
 	// why thumbnails went missing); the proxy keeps it same-origin, matching home.html.
 	const hfProfileUrl = `https://huggingface.co/datasets/BodyMaps/iPanTSMini/resolve/main/profile_only/${caseIdStr}/profile.jpg`;
-	const proxyThumbUrl = `${API_BASE}/api/proxy-image?url=${encodeURIComponent(hfProfileUrl)}`;
-
+	// const proxyThumbUrl = `${API_BASE}/api/proxy-image?url=${encodeURIComponent(hfProfileUrl)}`;
+	const proxyThumbUrl = `${API_BASE}/api/get_image_preview/${id}`;
 	const handleImgError = () => {
 		if (thumbUrl !== proxyThumbUrl) {
 			setThumbUrl(proxyThumbUrl); // local failed — retry via the same-origin HF proxy
