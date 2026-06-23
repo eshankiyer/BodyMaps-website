@@ -97,7 +97,7 @@ export function SegmentationMeshViewer({ caseId, checkState, loading, opacity, c
                       key={organ.id}
                       organ={organ}
                       visible={!!checkState[organ.id]}
-                      opacity={opacity}
+                      opacity={opacity/100}
                     />
                   );
                 })}
