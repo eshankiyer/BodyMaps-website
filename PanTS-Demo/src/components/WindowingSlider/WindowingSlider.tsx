@@ -1,4 +1,3 @@
-import React from "react";
 
 import { useEffect, useState } from "react";
 
@@ -21,6 +20,11 @@ export default function WindowingSlider({ windowWidth, windowCenter, onWindowCha
   useEffect(() => {
     setCenterInput(windowCenter * -1);
   }, [windowCenter]);
+
+  useEffect(() => {
+    setWidthInput(windowWidth);
+    setCenterInput(windowCenter);
+  }, [windowWidth, windowCenter]);
 
   const handleWidthInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const num = Number(e.target.value);

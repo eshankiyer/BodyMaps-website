@@ -17,6 +17,7 @@ import React, { lazy, Suspense, useEffect, useRef, useState, type MouseEvent } f
 import { createPortal } from "react-dom";
 import { useParams } from "react-router-dom";
 import ErrorBoundary from "../components/ErrorBoundary";
+import { SegmentationMeshViewer } from "../components/MeshViewer";
 import OpacitySlider from "../components/OpacitySlider/OpacitySlider";
 import OrganCheckbox from "../components/OrganCheckbox";
 import ReportScreen from "../components/ReportScreen/ReportScreen";
@@ -24,12 +25,17 @@ import SnakeGame from "../components/SnakeGame/SnakeGame";
 import WindowingSlider from "../components/WindowingSlider/WindowingSlider";
 import ZoomHandle from "../components/zoomHandle";
 import {
+    API_BASE,
+    APP_CONSTANTS,
+    segmentation_categories,
+    segmentation_category_colors,
+} from "../helpers/constants";
+import {
     clearMeasurements,
     getCrosshairMm,
     getOrganCentroids,
     getOrganLabelOnClick,
     LENGTH_TOOL,
-    type MeasurementToolName,
     moveCornerstoneCrosshairToMm,
     PROBE_TOOL,
     renderVisualization,
@@ -39,18 +45,12 @@ import {
     setVisibilities,
     subscribeToCrosshairChanges,
     subscribeToVolumeProgress,
-    toggleCrosshairTool
+    toggleCrosshairTool,
+    type MeasurementToolName
 } from "../helpers/CornerstoneNifti2";
-import { create3DVolume, moveNiiVueCrosshairToMm, updateVisibilities } from "../helpers/NiiVueNifti";
-import { decodeViewerState, encodeViewerState } from "../helpers/viewerShareState";
-import {
-    API_BASE,
-    APP_CONSTANTS,
-    segmentation_categories,
-    segmentation_category_colors,
-} from "../helpers/constants";
 import { filenameToName, getPanTSId } from "../helpers/utils";
-import { type CheckBoxData, type NColorMap } from "../types";
+import { decodeViewerState, encodeViewerState } from "../helpers/viewerShareState";
+import { type CheckBoxData } from "../types";
 import "./VisualizationPage.css";
 
 type ViewMode = "mpr" | "axial" | "sagittal" | "coronal" | "3d";
@@ -87,7 +87,7 @@ function VisualizationPage() {
 	// for big full-body scans than streaming the .nii.gz from HuggingFace). We probe
 	// the local file and only fall back to the public HuggingFace mirror when it isn't
 	// present (e.g. a dev checkout without the image data), so the viewer never breaks.
-	const displayId = pantsCase ?? sessionId ?? "1";
+	const caseId = pantsCase ?? sessionId ?? "1";
 	const [ctUrl, setCtUrl] = useState<string | null>(null);
 	const [segUrl, setSegUrl] = useState<string | null>(null);
 	// Whether the local volumes exist (enables the HD toggle). Dataset cases default to
@@ -139,7 +139,7 @@ function VisualizationPage() {
 	const sagittal_ref = useRef<HTMLDivElement>(null);
 	const coronal_ref = useRef<HTMLDivElement>(null);
 	const render_ref = useRef<HTMLCanvasElement>(null);
-	const cmapRef = useRef<NColorMap>(null);
+	// const _cmapRef = useRef<NColorMap>(null);
 	// const TaskMenu_ref = useRef(null);
 	const VisualizationContainer_ref = useRef(null);
 	//   const lastClickInfoRef = useRef(null);
@@ -149,7 +149,7 @@ function VisualizationPage() {
 	//   const [sliceCoronal, setSliceCoronal] = useState(0);
 	const [checkState, setCheckState] = useState<boolean[]>([true]);
 	useState<string[] | null>(null);
-	const [NV, setNV] = useState<Niivue | undefined>();
+	const [NV, _setNV] = useState<Niivue | undefined>();
 	const [sessionKey, _setSessionKey] = useState<string | undefined>(undefined);
 	const [checkBoxData, setCheckBoxData] = useState<CheckBoxData[]>([]);
 	const [opacityValue, setOpacityValue] = useState(
@@ -174,6 +174,7 @@ function VisualizationPage() {
 	const [showTaskDetails, setShowTaskDetails] = useState(true);
 	const [showOrganDetails, setShowOrganDetails] = useState(false);
 	const [loading, setLoading] = useState(true);
+	const [crosshairMm, setCrosshairMm] = useState<[number, number, number] | null>(null);
 	const [labelColorMap, _setLabelColorMap] = useState<{ [key: number]: Color }>(
 		segmentation_category_colors
 	);
@@ -206,8 +207,8 @@ function VisualizationPage() {
 	const shareStateAppliedRef = useRef(false);
 	const [viewMode, setViewMode] = useState<ViewMode>("mpr");
 	const [activePreset, setActivePreset] = useState<string>("Soft Tissue");
-	const [tooltip, setToolTip] = useState({
-		visible: false,	
+	const [_tooltip, setToolTip] = useState({
+		visible: false,
 		x: 0,
 		y: 0,
 		text: "",
@@ -255,6 +256,18 @@ function VisualizationPage() {
 		// the crosshair/pan toggle changes; here we only react to the measure-tool switch.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [activeMeasureTool]);
+
+	useEffect(() => {
+		const unsubscribe = subscribeToCrosshairChanges((mm) => {
+			setCrosshairMm([
+				mm[0],
+				mm[1],
+				mm[2],
+			]);
+		});
+
+		return unsubscribe;
+	}, [])
 
 	// Track the CT download to show an accurate ETA while the case loads. We follow the
 	// largest-total stream (the CT volume, not the smaller segmentation) and derive the
@@ -317,10 +330,12 @@ function VisualizationPage() {
 				!axial_ref.current ||
 				!sagittal_ref.current ||
 				!coronal_ref.current ||
-				!render_ref.current ||
+				// !render_ref.current ||
 				cmap.length === 0
-			)
+			) {
+				console.log("return", ctUrl, segUrl);
 				return;
+			}
 
 			const result = await renderVisualization(
 				axial_ref.current,
@@ -332,8 +347,7 @@ function VisualizationPage() {
 				setLoading
 			);
 
-			// setLoading(false);
-			if (!result) return;
+			setLoading(false);
 			const {
 				renderingEngine,
 				viewportIds,
@@ -343,22 +357,23 @@ function VisualizationPage() {
 			setRenderingEngine(renderingEngine);
 			setViewportIds(viewportIds);
 			setVolumeId(volumeId);
-			const { nv, cmapCopy } = await create3DVolume(
-				render_ref,
-				segUrl,
-				labelColorMap,
-				(mm) => moveCornerstoneCrosshairToMm(mm as [number, number, number])
-			);
-			cmapRef.current = cmapCopy;
-			setNV(nv);
+			// const { nv, cmapCopy } = await create3DVolume(
+			// 	render_ref,
+			// 	segUrl,
+			// 	labelColorMap,
+			// 	(mm) => moveCornerstoneCrosshairToMm(mm as [number, number, number])
+			// );
+			// cmapRef.current = cmapCopy;
+			// setNV(nv);
 
-			// Cornerstone → NiiVue: when crosshair moves in any 2D view, sync to 3D
-			subscribeToCrosshairChanges((mm) => {
-				moveNiiVueCrosshairToMm(nv, mm);
-			});
+			// // Cornerstone → NiiVue: when crosshair moves in any 2D view, sync to 3D
+			// subscribeToCrosshairChanges((mm) => {
+			// 	moveNiiVueCrosshairToMm(nv, mm);
+			// });
 		};
 
 		setup();
+
 	}, [
 		ctUrl,
 		segUrl,
@@ -505,7 +520,8 @@ function VisualizationPage() {
 		const centroid = getOrganCentroids()?.[label];
 		if (!centroid) return; // organ not present in this scan
 		moveCornerstoneCrosshairToMm(centroid);
-		if (NV) moveNiiVueCrosshairToMm(NV, centroid);
+		setCrosshairMm(centroid);
+		// if (NV) moveNiiVueCrosshairToMm(NV, centroid);
 		setCheckState((prev) => {
 			if (prev[label]) return prev;
 			const next = [...prev];
@@ -564,7 +580,7 @@ function VisualizationPage() {
 
 	// Update segmentation visibility when state changes
 	useEffect(() => {
-		if (checkState && NV) {
+		if (checkState) {
 			const checkStateArr = [
 				true, // ID=0 background 永远可见
 				...checkBoxData.map((item) => !!checkState[item.id]),
@@ -576,13 +592,12 @@ function VisualizationPage() {
 			// 	create3DVolumeFew(render_ref, labelColorMap, getPanTSId(pantsCase ?? "1"), visible);
 			// }
 			// else {
-			updateVisibilities(NV, checkStateArr, sessionKey, cmapRef.current);
+			// updateVisibilities(NV, checkStateArr, sessionKey, cmapRef.current);
 			// }
 			setVisibilities(checkStateArr);
 		}
 	}, [
 		checkState,
-		NV,
 		checkBoxData,
 		sessionKey,
 	]);
@@ -610,7 +625,7 @@ function VisualizationPage() {
 		setStatsError(false);
 		try {
 			const fd = new FormData();
-			fd.append("sessionKey", String(displayId));
+			fd.append("sessionKey", String(caseId));
 			const res = await fetch(`${API_BASE}/api/mask-data`, { method: "POST", body: fd });
 			const data = await res.json();
 			// The endpoint returns its errors with HTTP 200 + an `error` field, so check both.
@@ -641,7 +656,7 @@ function VisualizationPage() {
 
 		const link = document.createElement("a");
 		link.href = url;
-		link.download = `${displayId}_segmentations.zip`;
+		link.download = `${caseId}_segmentations.zip`;
 		document.body.appendChild(link);
 		link.click();
 		document.body.removeChild(link);
@@ -659,7 +674,7 @@ function VisualizationPage() {
 			})
 			return;
 		};
-		const label = segmentation_categories[idx-1];
+		const label = segmentation_categories[idx - 1];
 		setToolTip({
 			visible: true,
 			x: e.clientX + 10,
@@ -731,54 +746,54 @@ function VisualizationPage() {
 									{zoomMode ? null : (
 										<div className="flex flex-col gap-1 items-start text-left px-1">
 											<span className="vp-case-eyebrow">{sessionId ? "Session" : "Case"}</span>
-											<span className="vp-case-id">{displayId}</span>
+											<span className="vp-case-id">{caseId}</span>
 										</div>
 									)}
 
 									<>
 										{/* View mode */}
-									<div className="vp-panel">
-										<div className="vp-panel__title">View</div>
-										<div className="vp-seg">
-											{([
-												{ mode: "mpr" as ViewMode, label: "⊞ MPR" },
-												{ mode: "axial" as ViewMode, label: "Axial" },
-												{ mode: "sagittal" as ViewMode, label: "Sag" },
-												{ mode: "coronal" as ViewMode, label: "Cor" },
-												{ mode: "3d" as ViewMode, label: "3D" },
-											]).map(({ mode, label }) => (
-												<button
-													key={mode}
-													onClick={() => setViewMode(mode)}
-													className={`vp-seg__btn ${viewMode === mode ? "vp-seg__btn--active" : ""}`}
-												>{label}</button>
-											))}
+										<div className="vp-panel">
+											<div className="vp-panel__title">View</div>
+											<div className="vp-seg">
+												{([
+													{ mode: "mpr" as ViewMode, label: "⊞ MPR" },
+													{ mode: "axial" as ViewMode, label: "Axial" },
+													{ mode: "sagittal" as ViewMode, label: "Sag" },
+													{ mode: "coronal" as ViewMode, label: "Cor" },
+													{ mode: "3d" as ViewMode, label: "3D" },
+												]).map(({ mode, label }) => (
+													<button
+														key={mode}
+														onClick={() => setViewMode(mode)}
+														className={`vp-seg__btn ${viewMode === mode ? "vp-seg__btn--active" : ""}`}
+													>{label}</button>
+												))}
+											</div>
 										</div>
-									</div>
 
-									{/* CT Window presets */}
-									<div className="vp-panel">
-										<div className="vp-panel__title">CT Window</div>
-										<div className="vp-seg">
-											{CT_PRESETS.map((preset) => (
-												<button
-													key={preset.name}
-													onClick={() => handlePresetClick(preset)}
-													className={`vp-seg__btn ${activePreset === preset.name ? "vp-seg__btn--active" : ""}`}
-												>{preset.name}</button>
-											))}
+										{/* CT Window presets */}
+										<div className="vp-panel">
+											<div className="vp-panel__title">CT Window</div>
+											<div className="vp-seg">
+												{CT_PRESETS.map((preset) => (
+													<button
+														key={preset.name}
+														onClick={() => handlePresetClick(preset)}
+														className={`vp-seg__btn ${activePreset === preset.name ? "vp-seg__btn--active" : ""}`}
+													>{preset.name}</button>
+												))}
+											</div>
 										</div>
-									</div>
 
-									<OpacitySlider
-										opacityValue={opacityValue}
-										handleOpacityOnSliderChange={
-											handleOpacityOnSliderChange
-										}
-										handleOpacityOnFormSubmit={handleOpacityOnFormSubmit}
-										setShowOrganDetails={setShowOrganDetails}
-										setShowTaskDetails={setShowTaskDetails}
-									/>
+										<OpacitySlider
+											opacityValue={opacityValue}
+											handleOpacityOnSliderChange={
+												handleOpacityOnSliderChange
+											}
+											handleOpacityOnFormSubmit={handleOpacityOnFormSubmit}
+											setShowOrganDetails={setShowOrganDetails}
+											setShowTaskDetails={setShowTaskDetails}
+										/>
 
 										<WindowingSlider
 											windowWidth={windowWidth}
@@ -976,7 +991,7 @@ function VisualizationPage() {
 								<div className="vp-loading">
 									<div className="flex flex-col items-center gap-4">
 										<div className="vp-spinner" />
-										<div className="vp-loading__text">Preparing case {displayId}…</div>
+										<div className="vp-loading__text">Preparing case {caseId}…</div>
 									</div>
 								</div>
 							}
@@ -1030,21 +1045,7 @@ function VisualizationPage() {
 
 					<div className={`render ${loading ? "" : "vp-pane vp-pane--render"}`} data-label="3D" style={panelStyle("3d")}>
 						<div className="canvas">
-							<canvas
-								ref={render_ref}
-							// width={800} 
-							// height={800} 
-							// style={{ width: "100%", height: "100%" }}
-							>
-							</canvas>
-							{tooltip.visible && (
-								<div
-									className="vp-organ-tip"
-									style={{ top: tooltip.y, left: tooltip.x }}
-								>
-									{tooltip.text}
-								</div>
-							)}
+							<SegmentationMeshViewer caseId={caseId} crosshairMm={crosshairMm} checkState={checkState} loading={loading} opacity={opacityValue} />
 						</div>
 					</div>
 				</div>
@@ -1113,7 +1114,7 @@ function VisualizationPage() {
 			{
 				showReportScreen && (
 					<ReportScreen
-						id={displayId}
+						id={caseId}
 						onClose={() => setShowReportScreen(false)}
 					/>
 				)

@@ -1,4 +1,4 @@
-import { cache, eventTarget, init as coreInit, Enums, getRenderingEngine, imageLoader, RenderingEngine, setVolumesForViewports, volumeLoader } from "@cornerstonejs/core";
+import { cache, init as coreInit, Enums, eventTarget, getRenderingEngine, imageLoader, RenderingEngine, setVolumesForViewports, volumeLoader } from "@cornerstonejs/core";
 import type { ColorLUT } from "@cornerstonejs/core/types";
 import { cornerstoneNiftiImageLoader, createNiftiImageIdsAndCacheMetadata, init as niftiImageLoaderInit } from "@cornerstonejs/nifti-volume-loader";
 import * as cornerstoneTools from '@cornerstonejs/tools';
@@ -77,21 +77,43 @@ const viewportId3 = "CT_NIFTI_CORONAL";
 
 let currentRenderingEngine: RenderingEngine | null = null;
 
-// Crosshair sync state
-let _crosshairChangeCallback: ((mm: number[]) => void) | null = null;
+let _crosshairChangeCallbacks = new Set<(mm: number[]) => void>();
 let _isSyncing = false;
 let _crosshairListenerRegistered = false;
 
 function _handleCrosshairCenterChanged(evt: Event) {
     if (_isSyncing) return;
+
     const toolCenter = (evt as CustomEvent).detail?.toolCenter as number[] | undefined;
-    if (toolCenter && _crosshairChangeCallback) {
-        _crosshairChangeCallback(toolCenter);
+
+    if (!toolCenter || toolCenter.length < 3) return;
+
+    for (const cb of _crosshairChangeCallbacks) {
+        cb(toolCenter);
+    }
+}
+
+export function registerCrosshairListener(eventTarget: EventTarget, cornerstoneTools: any) {
+    if (!_crosshairListenerRegistered) {
+        eventTarget.addEventListener(
+            cornerstoneTools.Enums.Events.CROSSHAIR_TOOL_CENTER_CHANGED,
+            _handleCrosshairCenterChanged
+        );
+
+        _crosshairListenerRegistered = true;
     }
 }
 
 export function subscribeToCrosshairChanges(cb: (mm: number[]) => void) {
-    _crosshairChangeCallback = cb;
+    _crosshairChangeCallbacks.add(cb);
+
+    return () => {
+        _crosshairChangeCallbacks.delete(cb);
+    };
+}
+
+export function setCrosshairSyncing(value: boolean) {
+    _isSyncing = value;
 }
 
 export function moveCornerstoneCrosshairToMm(mm: [number, number, number]) {
@@ -283,7 +305,7 @@ export async function renderVisualization(ref1: HTMLDivElement, ref2: HTMLDivEle
 
     renderingEngine.renderViewports(viewportInputArray.map((viewport) => viewport.viewportId));
 
-    if (segmentationURL && segmentationImageIds.length > 0) {
+    if (segmentationURL && segmentationImageIds.length > 0 && segmentation) {
         const segmentationVolume = await volumeLoader.createAndCacheVolume(segmentationId, {
             imageIds: segmentationImageIds
         });
@@ -331,15 +353,17 @@ export async function renderVisualization(ref1: HTMLDivElement, ref2: HTMLDivEle
 
 export function setVisibilities(checkState: boolean[]) {
     for (let i = 1; i < checkState.length; i++) {
+        if (!segmentation.getActiveSegmentation(viewportId1)) return;
         segmentation.segmentIndex.setActiveSegmentIndex(segmentationId, i);
         segmentation.config.visibility.setSegmentIndexVisibility(viewportId1, { segmentationId: segmentationId, type: csToolsEnums.SegmentationRepresentations.Labelmap }, i, checkState[i]);
         segmentation.config.visibility.setSegmentIndexVisibility(viewportId2, { segmentationId: segmentationId, type: csToolsEnums.SegmentationRepresentations.Labelmap }, i, checkState[i]);
         segmentation.config.visibility.setSegmentIndexVisibility(viewportId3, { segmentationId: segmentationId, type: csToolsEnums.SegmentationRepresentations.Labelmap }, i, checkState[i]);
+        console.log(checkState[i]);
         // console.log(segmentation.config.visibility.getSegmentIndexVisibility(viewportId1, { segmentationId: segmentationId, type: csToolsEnums.SegmentationRepresentations.Labelmap }, i));
-        if (currentRenderingEngine) {
-            currentRenderingEngine.renderViewports([viewportId1, viewportId2, viewportId3]);
-            currentRenderingEngine.render();
-        }
+    }
+    if (currentRenderingEngine) {
+        currentRenderingEngine.renderViewports([viewportId1, viewportId2, viewportId3]);
+        currentRenderingEngine.render();
     }
 
 };

@@ -4,6 +4,4 @@ certs/
 dist/
 tmp/*
 
-PanTS/ProfileTr/
-PanTS/ProfileTe/
-PanTS/data/
+/PanTS/

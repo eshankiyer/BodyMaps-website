@@ -19,6 +19,8 @@ class Constants:
     # api_blueprint variables
     BASE_PATH = os.environ.get('BASE_PATH', '/')
     PANTS_PATH = os.environ.get('PANTS_PATH')
+    PERMISSIONS_DIR = os.environ.get('PERMISSIONS_DIR', "/home/visitor/data")
+    MESH_PATH = PERMISSIONS_DIR + "/render_only"
     MAIN_NIFTI_FORM_NAME = 'MAIN_NIFTI'
     MAIN_NPZ_FILENAME = 'ct.npz'
     MAIN_NIFTI_FILENAME = 'ct.nii.gz'
