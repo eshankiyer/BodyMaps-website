@@ -74,14 +74,12 @@ def organname_to_name(filename):
 def get_mask_data_internal(id, fallback=False):
     """Retrieve or compute organ metadata from NIfTI and mask paths for a session."""
     try:
-        subfolder = "ImageTr" if int(id) < 9000 else "ImageTe"
-        label_subfolder = "LabelTr" if int(id) < 9000 else "LabelTe"
-        main_nifti_path = f"{Constants.PANTS_PATH}/data/{subfolder}/{get_panTS_id(id)}/{Constants.MAIN_NIFTI_FILENAME}"
-        combined_labels_path = f"{Constants.PANTS_PATH}/data/{label_subfolder}/{get_panTS_id(id)}/{Constants.COMBINED_LABELS_NIFTI_FILENAME}"
+        main_nifti_path = f"{Constants.PANTS_PATH}/image_only/{get_panTS_id(id)}/{Constants.MAIN_NIFTI_FILENAME}"
+        combined_labels_path = f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(id)}/{Constants.COMBINED_LABELS_NIFTI_FILENAME}"
         print(f"[INFO] Processing NIFTI for id {id}")
         organ_intensities = None
         
-        organ_intensities_path = f"{Constants.PANTS_PATH}/data/{label_subfolder}/{get_panTS_id(id)}/{Constants.ORGAN_INTENSITIES_FILENAME}"
+        organ_intensities_path = f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(id)}/{Constants.ORGAN_INTENSITIES_FILENAME}"
         if not os.path.exists(organ_intensities_path) or not os.path.exists(combined_labels_path):
             npz_processor = NpzProcessor()
             labels, organ_intensities = npz_processor.combine_labels(int(id), keywords={"pancrea": "pancreas"}, save=True)
@@ -326,7 +324,7 @@ def generate_pdf_with_template(
                 return "N/A" if pd.isna(val) else val
             return default
         
-        wb = load_workbook(os.path.join(Constants.PANTS_PATH, "data", "metadata.xlsx"))
+        wb = load_workbook(os.path.join(Constants.PANTS_PATH, "metadata.xlsx"))
         sheet = wb["PanTS_metadata"]
         age = None
         sex = "-"
@@ -683,10 +681,8 @@ def zoom_into_labeled_area(ct_path, mask_path, output_path, color="red"):
 
 def get_pdac_staging(clabel_id):
     try:
-        subfolder = "ImageTr" if int(clabel_id) < 9000 else "ImageTe"
-        label_subfolder = "LabelTr" if int(clabel_id) < 9000 else "LabelTe"
-        main_nifti_path = f"{Constants.PANTS_PATH}/data/{subfolder}/{get_panTS_id(clabel_id)}/{Constants.MAIN_NIFTI_FILENAME}"
-        combined_labels_path = f"{Constants.PANTS_PATH}/data/{label_subfolder}/{get_panTS_id(clabel_id)}/{Constants.COMBINED_LABELS_NIFTI_FILENAME}"
+        main_nifti_path = f"{Constants.PANTS_PATH}/image_only/{get_panTS_id(clabel_id)}/{Constants.MAIN_NIFTI_FILENAME}"
+        combined_labels_path = f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(clabel_id)}/{Constants.COMBINED_LABELS_NIFTI_FILENAME}"
         
         nifti_processor = NiftiProcessor(main_nifti_path, combined_labels_path)
         staging_result = nifti_processor.calculate_pdac_sma_staging()
@@ -748,8 +744,6 @@ def download_clean_folder(root):
         print("ℹ️ Folder content does not match the expected file set. Skipping cleanup and split.")
         
 async def store_files(combined_labels_id):
-    subfolder = "LabelTr" if int(combined_labels_id) < 9000 else "LabelTe" 
-    image_subfolder = "ImageTr" if int(combined_labels_id) < 9000 else "ImageTe"
 
     def download(url, path):
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -765,16 +759,16 @@ async def store_files(combined_labels_id):
 
     # main CT
     image_url = f"https://huggingface.co/datasets/BodyMaps/iPanTSMini/resolve/main/image_only/{get_panTS_id(combined_labels_id)}/ct.nii.gz"
-    image_path = f"{Constants.PANTS_PATH}/data/{image_subfolder}/{get_panTS_id(combined_labels_id)}/ct.nii.gz"
+    image_path = f"{Constants.PANTS_PATH}/image_only/{get_panTS_id(combined_labels_id)}/ct.nii.gz"
     download(image_url, image_path)
 
     # labels
     for label in list(Constants.PREDEFINED_LABELS.values()):
         mask_url = f"https://huggingface.co/datasets/BodyMaps/iPanTSMini/resolve/main/mask_only/{get_panTS_id(combined_labels_id)}/segmentations/{label}.nii.gz"
-        mask_path = f"{Constants.PANTS_PATH}/data/{subfolder}/{get_panTS_id(combined_labels_id)}/segmentations/{label}.nii.gz"
+        mask_path = f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(combined_labels_id)}/segmentations/{label}.nii.gz"
         download(mask_url, mask_path)
         
-META_FILE = f"{Constants.PANTS_PATH}/data/metadata.xlsx"
+META_FILE = f"{Constants.PANTS_PATH}/metadata.xlsx"
 # ---------------------------
 # Helpers
 # ---------------------------

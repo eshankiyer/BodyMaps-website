@@ -61,15 +61,13 @@ class NpzProcessor:
     
     
     def npz_to_nifti(self, id: int, combined_label=True, save=True, path=None):
-        subfolder = "LabelTr" if id < 9000 else "LabelTe"
-        image_subfolder = "ImageTe" if id >= 9000 else "ImageTr"
         
         if combined_label and path is None:    
-            dir_path = pathlib.Path(f"{Constants.PANTS_PATH}/data/{subfolder}/{get_panTS_id(id)}/{Constants.COMBINED_LABELS_FILENAME}")
+            dir_path = pathlib.Path(f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(id)}/{Constants.COMBINED_LABELS_FILENAME}")
         else:
             dir_path = pathlib.Path(path)   
             
-        nifti_path = pathlib.Path(f"{Constants.PANTS_PATH}/data/{image_subfolder}/{get_panTS_id(id)}/{Constants.MAIN_NIFTI_FILENAME}")
+        nifti_path = pathlib.Path(f"{Constants.PANTS_PATH}/image_only/{get_panTS_id(id)}/{Constants.MAIN_NIFTI_FILENAME}")
         nifti_dat = nib.load(nifti_path)
 
         arr = np.load(dir_path)["data"].astype(np.float32)
@@ -83,16 +81,11 @@ class NpzProcessor:
         Merge multiple label masks into one combined segmentation and re-index the labels.
         """
         organ_intensities = {}
-        segment_subfolder = "LabelTr"
-        if id >= 9000:
-            segment_subfolder = "LabelTe"   
-        
-        image_subfolder = "ImageTe" if id >= 9000 else "ImageTr"
             
-        nifti_path = pathlib.Path(f"{Constants.PANTS_PATH}/data/{image_subfolder}/{get_panTS_id(id)}/{Constants.MAIN_NIFTI_FILENAME}")
+        nifti_path = pathlib.Path(f"{Constants.PANTS_PATH}/image_only/{get_panTS_id(id)}/{Constants.MAIN_NIFTI_FILENAME}")
         nifti_dat = nib.load(nifti_path)
         
-        dir_path = pathlib.Path(f"{Constants.PANTS_PATH}/data/{segment_subfolder}/{get_panTS_id(id)}/segmentations")
+        dir_path = pathlib.Path(f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(id)}/segmentations")
         npz_files = list(dir_path.glob("*.npz"))
         
         combined_labels_img_data = None
@@ -127,7 +120,7 @@ class NpzProcessor:
             for organ, data in keyword_dict.items():
                 if data is not None:
                     save_path = (
-                        f"{Constants.PANTS_PATH}/data/{segment_subfolder}/{get_panTS_id(id)}/segmentations/{organ}.nii.gz"
+                        f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(id)}/segmentations/{organ}.nii.gz"
                     )
                     img = nib.Nifti1Image(data, affine=nifti_dat.affine, header=nifti_dat.header)
                     nib.save(img, save_path)
@@ -135,13 +128,13 @@ class NpzProcessor:
             # save combined labels
             if combined_labels_img_data is not None:
                 save_path = (
-                    f"{Constants.PANTS_PATH}/data/{segment_subfolder}/{get_panTS_id(id)}/{Constants.COMBINED_LABELS_FILENAME}"
+                    f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(id)}/{Constants.COMBINED_LABELS_FILENAME}"
                 )
                 np.savez_compressed(save_path, data=combined_labels_img_data)
 
             # save organ intensities
             organ_save_path = (
-                f"{Constants.PANTS_PATH}/data/{segment_subfolder}/{get_panTS_id(id)}/{Constants.ORGAN_INTENSITIES_FILENAME}"
+                f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(id)}/{Constants.ORGAN_INTENSITIES_FILENAME}"
             )
             with open(organ_save_path, "w") as f:
                 json.dump(organ_intensities, f)
@@ -155,18 +148,16 @@ class NpzProcessor:
         """
 
         organ_intensities = {}
-        segment_subfolder = "LabelTr" if id < 9000 else "LabelTe"
-        image_subfolder = "ImageTr" if id < 9000 else "ImageTe"
 
         # load main reference image (for affine/header)
         nifti_path = pathlib.Path(
-            f"{Constants.PANTS_PATH}/data/{image_subfolder}/{get_panTS_id(id)}/{Constants.MAIN_NIFTI_FILENAME}"
+            f"{Constants.PANTS_PATH}/image_only/{get_panTS_id(id)}/{Constants.MAIN_NIFTI_FILENAME}"
         )
         base_nifti = nib.load(nifti_path)
 
         # folder containing NIfTI segmentations
         dir_path = pathlib.Path(
-            f"{Constants.PANTS_PATH}/data/{segment_subfolder}/{get_panTS_id(id)}/segmentations"
+            f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(id)}/segmentations"
         )
 
         if (len(organs) == 0):
@@ -209,7 +200,7 @@ class NpzProcessor:
             for organ, data in keyword_dict.items():
                 if data is not None:
                     save_path = (
-                        f"{Constants.PANTS_PATH}/data/{segment_subfolder}/{get_panTS_id(id)}/segmentations/{organ}.nii.gz"
+                        f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(id)}/segmentations/{organ}.nii.gz"
                     )
                     img = nib.Nifti1Image(data, affine=base_nifti.affine, header=base_nifti.header)
                     nib.save(img, save_path)
@@ -217,14 +208,14 @@ class NpzProcessor:
             # save combined mask as NIfTI
             if combined_labels is not None:
                 save_path = (
-                    f"{Constants.PANTS_PATH}/data/{segment_subfolder}/{get_panTS_id(id)}/{Constants.COMBINED_LABELS_NIFTI_FILENAME}"
+                    f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(id)}/{Constants.COMBINED_LABELS_NIFTI_FILENAME}"
                 )
                 img = nib.Nifti1Image(combined_labels, affine=base_nifti.affine, header=base_nifti.header)
                 nib.save(img, save_path)
 
             # save organ intensity mapping
             organ_save_path = (
-                f"{Constants.PANTS_PATH}/data/{segment_subfolder}/{get_panTS_id(id)}/{Constants.ORGAN_INTENSITIES_FILENAME}"
+                f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(id)}/{Constants.ORGAN_INTENSITIES_FILENAME}"
             )
             with open(organ_save_path, "w") as f:
                 json.dump(organ_intensities, f, indent=2)

@@ -18,6 +18,39 @@ function colorDistance(c1: number[], c2: number[]) {
   return Math.sqrt(sum);
 }
 
+export type Vec3 = [number, number, number];
+export function cornerstoneLpsMmToThree(
+    lpsMm: Vec3,
+    center: Vec3
+): Vec3 {
+    const [l, p, s] = lpsMm;
+
+    // Cornerstone world is usually LPS:
+    // L = left
+    // P = posterior
+    // S = superior
+    //
+    // NIfTI/nibabel world is usually RAS:
+    // R = -L
+    // A = -P
+    // S = S
+    const rasX = -l;
+    const rasY = -p;
+    const rasZ = s;
+
+    // Must match your Python mesh export:
+    // three = [rasX, rasZ, -rasY]
+    const threeX = rasX;
+    const threeY = rasZ;
+    const threeZ = -rasY;
+
+    return [
+        threeX - center[0],
+        threeY - center[1],
+        threeZ - center[2],
+    ];
+}
+
 export function closestColorIndex(
   target: number[],
   dict: { [key: number]: Color }

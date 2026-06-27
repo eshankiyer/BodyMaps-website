@@ -55,8 +55,7 @@ def _downsample(img, factor, order):
 
 def _seg_path_for(ct_path):
     """Map .../ImageTr/<id>/ct.nii.gz -> .../LabelTr/<id>/combined_labels.nii.gz."""
-    p = ct_path.replace(f"{os.sep}ImageTr{os.sep}", f"{os.sep}LabelTr{os.sep}")
-    p = p.replace(f"{os.sep}ImageTe{os.sep}", f"{os.sep}LabelTe{os.sep}")
+    p = ct_path.replace(f"{os.sep}image_only{os.sep}", f"{os.sep}mask_only{os.sep}")
     return p.replace(CT_NAME, SEG_NAME)
 
 
