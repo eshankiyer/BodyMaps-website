@@ -61,7 +61,6 @@ function Checked({
 		OrganSystem[system].forEach((sub) => {
 			if (typeof sub === "string") {
 				newCheckState[getOrganIdx(sub) + 1] = toggled;
-				console.log(toggled);
 				return;
 			}
 			const key: SubSystems = Object.keys(sub)[0] as SubSystems;
