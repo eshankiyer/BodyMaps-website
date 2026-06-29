@@ -24,6 +24,7 @@ import ReportScreen from "../components/ReportScreen/ReportScreen";
 import SnakeGame from "../components/SnakeGame/SnakeGame";
 import WindowingSlider from "../components/WindowingSlider/WindowingSlider";
 import ZoomHandle from "../components/zoomHandle";
+import OrganInfo from "../components/OrganInfo/OrganInfo";
 import {
     API_BASE,
     APP_CONSTANTS,
@@ -805,6 +806,7 @@ function VisualizationPage() {
 											setSubmitted={setZoomLevel}
 											setZoomMode={setZoomMode}
 										/>
+										<OrganInfo />
 									</>
 
 									{/* Report Download Zoom Buttons */}
