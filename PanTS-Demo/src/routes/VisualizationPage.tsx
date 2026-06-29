@@ -149,6 +149,7 @@ function VisualizationPage() {
 	//   const [sliceSagittal, setSliceSagittal] = useState(0);
 	//   const [sliceCoronal, setSliceCoronal] = useState(0);
 	const [checkState, setCheckState] = useState<boolean[]>([true]);
+	const [selectedOrganId, setSelectedOrganId] = useState<number | null>(null);
 	useState<string[] | null>(null);
 	const [NV, _setNV] = useState<Niivue | undefined>();
 	const [sessionKey, _setSessionKey] = useState<string | undefined>(undefined);
@@ -520,6 +521,7 @@ function VisualizationPage() {
 	const handleJumpToOrgan = (label: number) => {
 		const centroid = getOrganCentroids()?.[label];
 		if (!centroid) return; // organ not present in this scan
+		setSelectedOrganId(label);
 		moveCornerstoneCrosshairToMm(centroid);
 		setCrosshairMm(centroid);
 		// if (NV) moveNiiVueCrosshairToMm(NV, centroid);
@@ -806,7 +808,7 @@ function VisualizationPage() {
 											setSubmitted={setZoomLevel}
 											setZoomMode={setZoomMode}
 										/>
-										<OrganInfo />
+										<OrganInfo selectedOrganId={selectedOrganId} />
 									</>
 
 									{/* Report Download Zoom Buttons */}
