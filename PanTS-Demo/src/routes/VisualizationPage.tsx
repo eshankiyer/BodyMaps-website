@@ -24,6 +24,7 @@ import ReportScreen from "../components/ReportScreen/ReportScreen";
 import SnakeGame from "../components/SnakeGame/SnakeGame";
 import WindowingSlider from "../components/WindowingSlider/WindowingSlider";
 import ZoomHandle from "../components/zoomHandle";
+import Challenge from "../components/Challenge/Challenge";
 import {
     API_BASE,
     APP_CONSTANTS,
@@ -148,6 +149,11 @@ function VisualizationPage() {
 	//   const [sliceSagittal, setSliceSagittal] = useState(0);
 	//   const [sliceCoronal, setSliceCoronal] = useState(0);
 	const [checkState, setCheckState] = useState<boolean[]>([true]);
+	const [challengeActive, setChallengeActive] = useState(false);
+	const [challengeTarget, setChallengeTarget] = useState<number | null>(null);
+	const [challengeScore, setChallengeScore] = useState(0);
+	const [challengeStreak, setChallengeStreak] = useState(0);
+	const [challengeResult, setChallengeResult] = useState<{ correct: boolean; text: string } | null>(null);
 	useState<string[] | null>(null);
 	const [NV, _setNV] = useState<Niivue | undefined>();
 	const [sessionKey, _setSessionKey] = useState<string | undefined>(undefined);
@@ -663,8 +669,44 @@ function VisualizationPage() {
 		window.URL.revokeObjectURL(url);
 	};
 
+	const pickChallengeTarget = (): number | null => {
+		const cents = getOrganCentroids();
+		const ids = cents ? Object.keys(cents).map(Number).filter((n) => n >= 1) : [];
+		if (ids.length === 0) return null;
+		return ids[Math.floor(Math.random() * ids.length)];
+	};
+	const startChallenge = () => {
+		const t = pickChallengeTarget();
+		if (t === null) return;
+		setChallengeTarget(t);
+		setChallengeActive(true);
+		setChallengeResult(null);
+		setChallengeScore(0);
+		setChallengeStreak(0);
+	};
+	const stopChallenge = () => {
+		setChallengeActive(false);
+		setChallengeTarget(null);
+		setChallengeResult(null);
+	};
 	const handleMouseClick = async (e: MouseEvent) => {
 		const idx = getOrganLabelOnClick();
+		if (challengeActive && challengeTarget !== null) {
+			if (idx === undefined || typeof idx !== "number") {
+				setChallengeResult({ correct: false, text: "Click a labeled structure." });
+				return;
+			}
+			if (idx === challengeTarget) {
+				setChallengeScore((sc) => sc + 1);
+				setChallengeStreak((st) => st + 1);
+				setChallengeResult({ correct: true, text: `Correct, that is the ${segmentation_categories[idx - 1].replaceAll("_", " ")}.` });
+				setChallengeTarget(pickChallengeTarget());
+			} else {
+				setChallengeStreak(0);
+				setChallengeResult({ correct: false, text: `That is the ${segmentation_categories[idx - 1].replaceAll("_", " ")} — try again.` });
+			}
+			return;
+		}
 		if (idx === undefined || typeof idx !== "number") {
 			setToolTip({
 				visible: false,
@@ -804,6 +846,15 @@ function VisualizationPage() {
 											submitted={zoomLevel}
 											setSubmitted={setZoomLevel}
 											setZoomMode={setZoomMode}
+										/>
+										<Challenge
+											active={challengeActive}
+											targetName={challengeTarget !== null ? segmentation_categories[challengeTarget - 1] : null}
+											score={challengeScore}
+											streak={challengeStreak}
+											result={challengeResult}
+											onStart={startChallenge}
+											onStop={stopChallenge}
 										/>
 									</>
 
