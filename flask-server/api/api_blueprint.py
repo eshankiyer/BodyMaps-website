@@ -193,6 +193,8 @@ def get_preview(clabel_ids):
 # if not preloaded
 @api_blueprint.route('/get_image_preview/<clabel_id>', methods=['GET'])
 def get_image_preview(clabel_id):
+    if not _is_safe_id(clabel_id):
+        return jsonify({"error": "Invalid id"}), 400
     path = os.path.join(Constants.PANTS_PATH, "profile_only", get_panTS_id(clabel_id), "profile.jpg")
     if not os.path.exists(path):
         return jsonify({"error": f"File not found: {path} "}), 404
@@ -206,7 +208,9 @@ def get_image_preview(clabel_id):
 
 @api_blueprint.route("/cases/<case_id>/mesh-manifest")
 def get_mesh_manifest(case_id):
-    manifest_path = os.path.join(Constants.MESH_PATH, get_panTS_id(case_id), "manifest.json") 
+    if not _is_safe_id(case_id):
+        return jsonify({"error": "Invalid id"}), 400
+    manifest_path = os.path.join(Constants.MESH_PATH, get_panTS_id(case_id), "manifest.json")
 
     if not os.path.exists(manifest_path):
         return jsonify({"error": f"File not found: {manifest_path} "}), 404
@@ -327,6 +331,8 @@ def get_mask_data():
   
 @api_blueprint.route('/get-main-nifti/<clabel_id>', methods=['GET'])
 def get_main_nifti(clabel_id):
+    if not _is_safe_id(clabel_id):
+        return jsonify({"error": "Invalid id"}), 400
     case_dir = f"{Constants.PANTS_PATH}/image_only/{get_panTS_id(clabel_id)}"
     main_nifti_path = f"{case_dir}/{Constants.MAIN_NIFTI_FILENAME}"
 
@@ -438,6 +444,8 @@ async def get_specific_segmentations(combined_labels_id):
         return jsonify({"error": f"Error loading organ metrics: {str(e)}"}), 500
 @api_blueprint.route('/get-segmentations/<combined_labels_id>', methods=['GET'])
 async def get_segmentations(combined_labels_id):
+    if not _is_safe_id(combined_labels_id):
+        return jsonify({"error": "Invalid id"}), 400
     nifti_path = f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(combined_labels_id)}/{Constants.COMBINED_LABELS_NIFTI_FILENAME}"
     labels = list(Constants.PREDEFINED_LABELS.values())
     # ?res=low → serve the precomputed low-res mask (paired with the low-res CT so the
@@ -485,6 +493,8 @@ async def get_segmentations(combined_labels_id):
 @api_blueprint.route('/download/<id>', methods=['GET'])
 def download_segmentation_zip(id):
     try:
+        if not _is_safe_id(id):
+            return jsonify({"error": "Invalid id"}), 400
         outputs_ct_folder = Path(f"{Constants.PANTS_PATH}/mask_only/{get_panTS_id(id)}/segmentations")
         
         if not os.path.exists(outputs_ct_folder):
