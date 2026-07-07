@@ -912,17 +912,33 @@ export function applyVolume3DPreset(presetName: string) {
   }
 }
 
+// Resolve once the element has a non-zero layout size (up to ~500ms), so the
+// on-screen canvas Cornerstone allocates isn't 0×0 (a classic "black 3D pane").
+function _waitForLayout(element: HTMLElement): Promise<boolean> {
+  return new Promise((resolve) => {
+    let tries = 0;
+    const check = () => {
+      if (element.offsetWidth > 0 && element.offsetHeight > 0) return resolve(true);
+      if (tries++ > 30) return resolve(element.offsetWidth > 0);
+      requestAnimationFrame(check);
+    };
+    check();
+  });
+}
+
 export async function enableVolume3D(
   element: HTMLDivElement,
   presetName: string = _lastVolume3DPreset
 ): Promise<boolean> {
-  if (!_currentCtVolumeId) return false;
+  if (!_currentCtVolumeId || !cache.getVolume(_currentCtVolumeId)) return false;
   try {
     try {
       cornerstoneTools.addTool(TrackballRotateTool);
     } catch {
       /* already registered */
     }
+    await _waitForLayout(element);
+
     // Dedicated engine — never share the MPR engine (see the note by its id).
     const engine = _getVolume3DEngine();
     engine.enableElement({
@@ -934,6 +950,25 @@ export async function enableVolume3D(
         background: [0.03, 0.035, 0.043],
       },
     });
+    const viewport = engine.getViewport(volume3DViewportId) as any;
+    // Canonical VOLUME_3D recipe: attach the volume, THEN the preset (setPreset
+    // no-ops if the volume actor isn't present yet), then frame + render.
+    await viewport.setVolumes([{ volumeId: _currentCtVolumeId }]);
+    viewport.setProperties({ preset: presetName });
+    _lastVolume3DPreset = presetName;
+    // Match the on-screen canvas to the (now laid-out) element before framing.
+    engine.resize(true, false);
+    viewport.resetCamera();
+    viewport.render();
+
+    // If no volume actor attached, ray casting will just show black — report
+    // failure so the UI can fall back to a message instead of a blank pane.
+    const actorCount = viewport.getActors?.().length ?? 0;
+    if (actorCount === 0) {
+      console.warn("Volume rendering: no volume actor attached.");
+      return false;
+    }
+
     ToolGroupManager.destroyToolGroup(volume3DToolGroupId); // stale viewport ref from a prior open
     const toolGroup = ToolGroupManager.createToolGroup(volume3DToolGroupId);
     if (!toolGroup) return false;
@@ -950,10 +985,6 @@ export async function enableVolume3D(
       bindings: [{ mouseButton: csToolsEnums.MouseBindings.Auxiliary }],
     });
     toolGroup.addViewport(volume3DViewportId, volume3DEngineId);
-    await setVolumesForViewports(engine, [{ volumeId: _currentCtVolumeId }], [volume3DViewportId]);
-    applyVolume3DPreset(presetName);
-    const viewport = engine.getViewport(volume3DViewportId);
-    viewport.resetCamera();
     viewport.render();
     return true;
   } catch (e) {
