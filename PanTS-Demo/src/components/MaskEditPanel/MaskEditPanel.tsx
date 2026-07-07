@@ -1,5 +1,6 @@
-import { IconArrowBackUp, IconArrowForwardUp, IconBrush, IconDownload, IconEraser } from "@tabler/icons-react";
+import { IconArrowBackUp, IconArrowForwardUp, IconBrush, IconCloudUpload, IconDownload, IconEraser } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
+import { API_BASE } from "../../helpers/constants";
 import {
 	getMaskEditHistoryState,
 	getSegmentationExport,
@@ -19,6 +20,8 @@ export type MaskEditMode = "brush" | "eraser" | null;
 type Props = {
 	organs: CheckBoxData[];
 	caseId: string;
+	/** Dataset case id — enables "Save to server" (versioned under edited_masks/). */
+	serverCaseId?: string;
 	mode: MaskEditMode;
 	onModeChange: (mode: MaskEditMode) => void;
 	onClose: () => void;
@@ -31,12 +34,13 @@ const DEFAULT_BRUSH_MM = 10;
 // Right-side panel for correcting the segmentation masks: pick the target organ,
 // paint or erase on any 2D pane, undo/redo, and download the edited labelmap as
 // .nii.gz. Everything happens client-side on the loaded labelmap volume.
-function MaskEditPanel({ organs, caseId, mode, onModeChange, onClose, onEdit }: Props) {
+function MaskEditPanel({ organs, caseId, serverCaseId, mode, onModeChange, onClose, onEdit }: Props) {
 	const [segment, setSegment] = useState(organs[0]?.id ?? 1);
 	const [brushMm, setBrushMm] = useState(DEFAULT_BRUSH_MM);
 	const [edited, setEdited] = useState(false);
 	const [history, setHistory] = useState({ canUndo: false, canRedo: false });
 	const [exporting, setExporting] = useState(false);
+	const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
 	// Seed the brush target/size when the panel opens.
 	useEffect(() => {
@@ -55,6 +59,31 @@ function MaskEditPanel({ organs, caseId, mode, onModeChange, onClose, onEdit }: 
 		});
 		return unsubscribe;
 	}, [segment, organs, onEdit]);
+
+	// Versioned save into {PANTS_PATH}/edited_masks/<case>/ — never overwrites the
+	// dataset's original labels.
+	const saveToServer = async () => {
+		if (!serverCaseId) return;
+		const labelmap = getSegmentationExport();
+		if (!labelmap) return;
+		setSaveState("saving");
+		try {
+			const form = new FormData();
+			form.append("mask", buildNiftiGzBlob(labelmap), "combined_labels_edited.nii.gz");
+			const res = await fetch(`${API_BASE}/api/save-edited-mask/${serverCaseId}`, {
+				method: "POST",
+				body: form,
+			});
+			const body = await res.json().catch(() => ({}));
+			if (!res.ok || body.error) throw new Error(body.error || `HTTP ${res.status}`);
+			setSaveState("saved");
+			window.setTimeout(() => setSaveState("idle"), 2500);
+		} catch (e) {
+			console.error(e);
+			setSaveState("error");
+			window.setTimeout(() => setSaveState("idle"), 4000);
+		}
+	};
 
 	const download = () => {
 		const labelmap = getSegmentationExport();
@@ -165,6 +194,22 @@ function MaskEditPanel({ organs, caseId, mode, onModeChange, onClose, onEdit }: 
 					<IconDownload size={16} />
 					{exporting ? "Packing…" : "Download edited mask (.nii.gz)"}
 				</button>
+				{serverCaseId && (
+					<button
+						className={`vp-edit__save ${saveState === "error" ? "is-error" : ""}`}
+						disabled={!edited || saveState === "saving"}
+						onClick={() => { void saveToServer(); }}
+					>
+						<IconCloudUpload size={16} />
+						{saveState === "saving"
+							? "Saving…"
+							: saveState === "saved"
+								? "Saved ✓"
+								: saveState === "error"
+									? "Save failed — retry"
+									: "Save to server (new version)"}
+					</button>
+				)}
 				<div className="vp-edit__hint">
 					{mode
 						? `${mode === "brush" ? "Painting" : "Erasing"} on the 2D panes — drag to ${mode === "brush" ? "fill" : "clear"}.`
