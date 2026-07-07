@@ -1643,6 +1643,7 @@ const flaggedOrgans = useMemo(() => summarizeOutOfRange(statRows), [statRows]);
 				<MaskEditPanel
 					organs={checkBoxData}
 					caseId={String(caseId)}
+					serverCaseId={pantsCase}
 					mode={editMode}
 					onModeChange={setEditMode}
 					onClose={() => {
