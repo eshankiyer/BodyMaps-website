@@ -22,6 +22,7 @@ const {
     AngleTool,
     EllipticalROITool,
     BrushTool,
+    TrackballRotateTool,
 } = cornerstoneTools;
 
 // Measurement tools the toolbar can switch the primary mouse button to. Length =
@@ -88,8 +89,19 @@ const segmentationId = "mySegmentation";
 const viewportId1 = "CT_NIFTI_AXIAL";
 const viewportId2 = "CT_NIFTI_SAGITTAL";
 const viewportId3 = "CT_NIFTI_CORONAL";
+const MPR_VIEWPORT_IDS = [viewportId1, viewportId2, viewportId3];
+
+// Shaded volume rendering (3D pane "Volume" mode) — own viewport + tool group so
+// trackball rotation never fights the MPR crosshair bindings.
+const volume3DViewportId = "CT_VOLUME_3D";
+const volume3DToolGroupId = "volume3DToolGroup";
 
 let currentRenderingEngine: RenderingEngine | null = null;
+// The CT volume currently on the MPR viewports (changes when the progressive
+// full-res upgrade swaps it) and the color LUT used for the labelmap, kept so
+// the segmentation representation can be rebuilt after a volume swap.
+let _currentCtVolumeId: string | null = null;
+let _lastColorLUT: ColorLUT | null = null;
 
 let _crosshairChangeCallbacks = new Set<(mm: number[]) => void>();
 let _isSyncing = false;
@@ -216,6 +228,7 @@ export async function renderVisualization(ref1: HTMLDivElement, ref2: HTMLDivEle
     const mainNiftiURL = ctUrl;
     const segmentationURL = segUrl;
     ToolGroupManager.destroyToolGroup(toolGroupId);
+    ToolGroupManager.destroyToolGroup(volume3DToolGroupId); // stale 3D viewport refs
     const toolGroup = ToolGroupManager.createToolGroup(toolGroupId);
     if (!toolGroup) {
         throw new Error("Failed to create tool group");
@@ -291,6 +304,8 @@ export async function renderVisualization(ref1: HTMLDivElement, ref2: HTMLDivEle
     // Local DICOM opens happen within one SPA session (upload → view → back → open
     // another folder), so each load needs a fresh id or the cache serves the old scan.
     const ctVolumeId = opts?.ctImageIds ? `dicomVolume-${Date.now()}` : volumeId;
+    _currentCtVolumeId = ctVolumeId;
+    _lastColorLUT = convertedColorLUT;
     
     const viewportInputArray = [
         {
@@ -771,6 +786,192 @@ export async function captureViewportImages(): Promise<ViewportImage[]> {
     }
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Progressive resolution upgrade — stream the full-res CT in the background
+// and hot-swap it into the MPR viewports without a page reload. Cameras are
+// preserved; the labelmap representation must be rebuilt because setVolumes
+// replaces every volume actor on the viewport.
+// ---------------------------------------------------------------------------
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- optional cornerstone APIs probed at runtime */
+async function _rebuildSegmentationRepresentations() {
+  if (!_lastColorLUT || !cache.getVolume(segmentationId)) return;
+  for (const viewportId of MPR_VIEWPORT_IDS) {
+    try {
+      // Drop the (now actor-less) representation entry first so re-adding isn't a no-op.
+      (segmentation as any).removeSegmentationRepresentations?.(viewportId, {
+        segmentationId,
+        type: csToolsEnums.SegmentationRepresentations.Labelmap,
+      });
+    } catch {
+      /* nothing to remove */
+    }
+    await segmentation.addSegmentationRepresentations(viewportId, [
+      {
+        segmentationId,
+        type: csToolsEnums.SegmentationRepresentations.Labelmap,
+        config: { colorLUTOrIndex: _lastColorLUT },
+      },
+    ]);
+    segmentation.activeSegmentation.setActiveSegmentation(viewportId, segmentationId);
+  }
+}
+
+/**
+ * Load the given full-res CT and swap it into every viewport in place.
+ * Returns the new volumeId, or null on failure (caller keeps the current
+ * volume — nothing is torn down until the new one is fully loaded).
+ */
+export async function upgradeCtVolume(fullResCtUrl: string): Promise<string | null> {
+  const engine = currentRenderingEngine;
+  if (!engine) return null;
+  try {
+    const imageIds = await createNiftiImageIdsAndCacheMetadata({ url: fullResCtUrl });
+    const newVolumeId = `ctVolume-hd-${Date.now()}`;
+    const volume = await volumeLoader.createAndCacheVolume(newVolumeId, { imageIds });
+    await volume.load();
+
+    // Preserve each pane's camera so the swap is visually seamless.
+    const cameras = new Map<string, unknown>();
+    for (const viewportId of MPR_VIEWPORT_IDS) {
+      try {
+        cameras.set(viewportId, engine.getViewport(viewportId).getCamera());
+      } catch {
+        /* viewport gone — skip */
+      }
+    }
+    await setVolumesForViewports(engine, [{ volumeId: newVolumeId }], MPR_VIEWPORT_IDS);
+    for (const viewportId of MPR_VIEWPORT_IDS) {
+      const camera = cameras.get(viewportId);
+      if (!camera) continue;
+      try {
+        engine.getViewport(viewportId).setCamera(camera as never);
+      } catch {
+        /* keep the reset camera */
+      }
+    }
+    await _rebuildSegmentationRepresentations();
+
+    // If the shaded 3D volume view is open, move it to the new volume too.
+    try {
+      const vp3d = engine.getViewport(volume3DViewportId);
+      if (vp3d) {
+        await setVolumesForViewports(engine, [{ volumeId: newVolumeId }], [volume3DViewportId]);
+        applyVolume3DPreset(_lastVolume3DPreset);
+      }
+    } catch {
+      /* 3D view not enabled */
+    }
+
+    _currentCtVolumeId = newVolumeId;
+    engine.renderViewports([...MPR_VIEWPORT_IDS]);
+    return newVolumeId;
+  } catch (e) {
+    console.warn("Full-res upgrade failed; keeping the current volume.", e);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Shaded GPU volume rendering ("Volume" mode in the 3D pane): ray-cast VTK.js
+// rendering of the CT itself with clinical transfer-function presets, driven
+// by a trackball camera. Works with or without a segmentation (local DICOM).
+// ---------------------------------------------------------------------------
+
+// Curated subset of Cornerstone's VTK presets that read well on CT.
+export const VOLUME_3D_PRESETS = [
+  { name: "CT-Bone", label: "Bone" },
+  { name: "CT-AAA", label: "Angio" },
+  { name: "CT-Chest-Contrast-Enhanced", label: "Chest" },
+  { name: "CT-Lung", label: "Lung" },
+  { name: "CT-Soft-Tissue", label: "Soft tissue" },
+  { name: "CT-MIP", label: "MIP" },
+] as const;
+
+let _lastVolume3DPreset: string = VOLUME_3D_PRESETS[0].name;
+
+export function applyVolume3DPreset(presetName: string) {
+  _lastVolume3DPreset = presetName;
+  const engine = currentRenderingEngine;
+  if (!engine) return;
+  try {
+    const viewport = engine.getViewport(volume3DViewportId) as any;
+    viewport?.setProperties?.({ preset: presetName });
+    viewport?.render?.();
+  } catch {
+    /* 3D view not enabled */
+  }
+}
+
+export async function enableVolume3D(
+  element: HTMLDivElement,
+  presetName: string = _lastVolume3DPreset
+): Promise<boolean> {
+  const engine = currentRenderingEngine;
+  if (!engine || !_currentCtVolumeId) return false;
+  try {
+    try {
+      cornerstoneTools.addTool(TrackballRotateTool);
+    } catch {
+      /* already registered */
+    }
+    engine.enableElement({
+      viewportId: volume3DViewportId,
+      type: Enums.ViewportType.VOLUME_3D,
+      element,
+      defaultOptions: {
+        orientation: Enums.OrientationAxis.CORONAL,
+        background: [0.03, 0.035, 0.043],
+      },
+    });
+    let toolGroup = ToolGroupManager.getToolGroup(volume3DToolGroupId);
+    if (!toolGroup) {
+      toolGroup = ToolGroupManager.createToolGroup(volume3DToolGroupId);
+      if (!toolGroup) return false;
+      toolGroup.addTool(TrackballRotateTool.toolName);
+      toolGroup.addTool(ZoomTool.toolName);
+      toolGroup.addTool(PanTool.toolName);
+      toolGroup.setToolActive(TrackballRotateTool.toolName, {
+        bindings: [{ mouseButton: csToolsEnums.MouseBindings.Primary }],
+      });
+      toolGroup.setToolActive(ZoomTool.toolName, {
+        bindings: [{ mouseButton: csToolsEnums.MouseBindings.Wheel }],
+      });
+      toolGroup.setToolActive(PanTool.toolName, {
+        bindings: [{ mouseButton: csToolsEnums.MouseBindings.Auxiliary }],
+      });
+    }
+    toolGroup.addViewport(volume3DViewportId, renderingEngineId);
+    await setVolumesForViewports(engine, [{ volumeId: _currentCtVolumeId }], [volume3DViewportId]);
+    applyVolume3DPreset(presetName);
+    const viewport = engine.getViewport(volume3DViewportId);
+    viewport.resetCamera();
+    viewport.render();
+    return true;
+  } catch (e) {
+    console.warn("Volume rendering unavailable:", e);
+    return false;
+  }
+}
+
+export function disableVolume3D() {
+  const engine = currentRenderingEngine;
+  if (!engine) return;
+  try {
+    ToolGroupManager.getToolGroup(volume3DToolGroupId)?.removeViewports(
+      renderingEngineId,
+      volume3DViewportId
+    );
+  } catch {
+    /* tool group already gone */
+  }
+  try {
+    engine.disableElement(volume3DViewportId);
+  } catch {
+    /* viewport already gone */
+  }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
