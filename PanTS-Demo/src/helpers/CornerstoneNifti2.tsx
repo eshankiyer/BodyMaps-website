@@ -405,7 +405,15 @@ export function setVisibilities(checkState: boolean[]) {
     }
     // The loop above walks setActiveSegmentIndex through every id — restore the one the
     // brush is targeting, or edits would silently land on the last organ in the list.
-    segmentation.segmentIndex.setActiveSegmentIndex(segmentationId, _activeEditSegment);
+    // Guarded: this effect also fires on mount, before the segmentation exists, and
+    // setActiveSegmentIndex throws on a missing segmentation (blanks the whole page).
+    try {
+        if (segmentation.getActiveSegmentation(viewportId1)) {
+            segmentation.segmentIndex.setActiveSegmentIndex(segmentationId, _activeEditSegment);
+        }
+    } catch {
+        /* segmentation not loaded yet */
+    }
     if (currentRenderingEngine) {
         currentRenderingEngine.renderViewports([viewportId1, viewportId2, viewportId3]);
         currentRenderingEngine.render();
