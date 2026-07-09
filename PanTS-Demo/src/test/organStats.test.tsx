@@ -44,6 +44,12 @@ vi.mock("../helpers/CornerstoneNifti2", () => ({
 	renameMeasurement: vi.fn(),
 	removeMeasurement: vi.fn(),
 	jumpToMeasurement: vi.fn(() => null),
+	// Progressive full-res upgrade + shaded volume rendering (3D pane)
+	upgradeCtVolume: vi.fn(async () => null),
+	enableVolume3D: vi.fn(async () => false),
+	disableVolume3D: vi.fn(),
+	applyVolume3DPreset: vi.fn(),
+	VOLUME_3D_PRESETS: [{ name: "CT-Bone", label: "Bone" }],
 	// Mask editing (brush/eraser + labelmap export)
 	setActiveMaskEditTool: vi.fn(),
 	setActiveEditSegment: vi.fn(),

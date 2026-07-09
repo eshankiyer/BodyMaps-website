@@ -36,12 +36,15 @@ import {
 } from "../helpers/constants";
 import {
     ANGLE_TOOL,
+    applyVolume3DPreset,
     captureViewportImages,
     centerOnCursor,
     clearMeasurements,
+    disableVolume3D,
     EDIT_BRUSH,
     EDIT_ERASER,
     ELLIPSE_TOOL,
+    enableVolume3D,
     getCrosshairMm,
     getMeasurementSummaries,
     getOrganCentroids,
@@ -60,6 +63,8 @@ import {
     subscribeToMeasurementChanges,
     subscribeToVolumeProgress,
     toggleCrosshairTool,
+    upgradeCtVolume,
+    VOLUME_3D_PRESETS,
     zoomToFit,
     type MeasurementToolName
 } from "../helpers/CornerstoneNifti2";
@@ -243,6 +248,24 @@ function VisualizationPage() {
 	// Mask editing: right-side panel + which brush (paint/erase) owns the mouse.
 	const [showEditPanel, setShowEditPanel] = useState(false);
 	const [editMode, setEditMode] = useState<MaskEditMode>(null);
+	// Progressive resolution: after the fast low-res load, the full-res CT streams in
+	// the background and hot-swaps in place (no reload). idle → streaming → done/failed.
+	const [enhance, setEnhance] = useState<{ state: "idle" | "streaming" | "done" | "failed"; pct: number | null }>({ state: "idle", pct: null });
+	const enhanceStartedRef = useRef(false);
+	// Live mirrors so the async swap re-applies the *current* window/visibility, not
+	// the values captured when the stream started.
+	const windowRef = useRef({ w: windowWidth, c: windowCenter });
+	const checkStateRef = useRef(checkState);
+	const checkBoxDataRef = useRef(checkBoxData);
+	useEffect(() => { windowRef.current = { w: windowWidth, c: windowCenter }; }, [windowWidth, windowCenter]);
+	useEffect(() => { checkStateRef.current = checkState; }, [checkState]);
+	useEffect(() => { checkBoxDataRef.current = checkBoxData; }, [checkBoxData]);
+	// 3D pane rendering mode: organ meshes (dataset cases) or shaded GPU volume
+	// rendering of the CT itself (the only 3D option for local DICOM).
+	const [threeDMode, setThreeDMode] = useState<"mesh" | "volume">(isDicom ? "volume" : "mesh");
+	const [volumePreset, setVolumePreset] = useState<string>(VOLUME_3D_PRESETS[0].name);
+	const [volume3DFailed, setVolume3DFailed] = useState(false);
+	const volume3DRef = useRef<HTMLDivElement>(null);
 	// Collapsible measurement-tools flyout (declutters the toolbar). The menu renders in a
 	// portal at a fixed position so it isn't clipped by the scrollable settings panel.
 	const [measureMenuOpen, setMeasureMenuOpen] = useState(false);
@@ -475,6 +498,79 @@ function VisualizationPage() {
 		}
 		loggedViewMode.current = viewMode;
 	}, [viewMode]);
+
+	// ---- Progressive resolution: background full-res stream + in-place swap --------
+
+	const runEnhance = async () => {
+		if (!pantsCase || enhanceStartedRef.current) return;
+		enhanceStartedRef.current = true;
+		setEnhance({ state: "streaming", pct: 0 });
+		// The HD stream is the only download in flight, so any progress event is ours.
+		const unsubscribe = subscribeToVolumeProgress((loaded, total) => {
+			if (total > 0) {
+				setEnhance({ state: "streaming", pct: Math.min(100, Math.round((loaded / total) * 100)) });
+			}
+		});
+		try {
+			const newVolumeId = await upgradeCtVolume(`${API_BASE}/api/get-main-nifti/${pantsCase}`);
+			if (!newVolumeId) {
+				setEnhance({ state: "failed", pct: null });
+				return;
+			}
+			setVolumeId(newVolumeId);
+			// setVolumes resets the transfer function and rebuilds the labelmap actors —
+			// re-apply the *current* window and organ visibility (live refs, not closures).
+			handleWindowChange(windowRef.current.w, windowRef.current.c);
+			setVisibilities([
+				true,
+				...checkBoxDataRef.current.map((item) => !!checkStateRef.current[item.id]),
+			]);
+			setEnhance({ state: "done", pct: 100 });
+			sessionRef.current?.log("session", "Enhanced to full resolution");
+		} catch {
+			setEnhance({ state: "failed", pct: null });
+		} finally {
+			unsubscribe();
+		}
+	};
+
+	// Auto-start the full-res stream shortly after the fast low-res view is usable.
+	// Only when the local files exist (server disk — fast); the HuggingFace fallback
+	// is already full-res, and ?hd=1 loads full-res up front.
+	useEffect(() => {
+		if (loading || !localAvailable || isHd || isDicom || !pantsCase) return;
+		if (enhanceStartedRef.current) return;
+		// Ref is flipped inside the timer (not here) so StrictMode's double-run —
+		// which clears the first timer — still ends up scheduling exactly one stream.
+		const timer = window.setTimeout(() => { void runEnhance(); }, 1500);
+		return () => window.clearTimeout(timer);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [loading, localAvailable, isHd, isDicom, pantsCase]);
+
+	// ---- Shaded 3D volume rendering (Volume mode in the 3D pane) -------------------
+
+	useEffect(() => {
+		if (loading || threeDMode !== "volume" || !renderingEngine) return;
+		const element = volume3DRef.current;
+		if (!element) return;
+		let disposed = false;
+		setVolume3DFailed(false);
+		(async () => {
+			const ok = await enableVolume3D(element, volumePreset).catch(() => false);
+			if (!disposed && !ok) setVolume3DFailed(true);
+		})();
+		return () => {
+			disposed = true;
+			disableVolume3D();
+		};
+		// volumePreset intentionally omitted — preset changes are applied in place below,
+		// without tearing the viewport down.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [threeDMode, loading, renderingEngine]);
+
+	useEffect(() => {
+		if (threeDMode === "volume") applyVolume3DPreset(volumePreset);
+	}, [volumePreset, threeDMode]);
 
 	// Track the CT download to show an accurate ETA while the case loads. We follow the
 	// largest-total stream (the CT volume, not the smaller segmentation) and derive the
@@ -1352,12 +1448,30 @@ const flaggedOrgans = useMemo(() => summarizeOutOfRange(statRows), [statRows]);
 											)}
 											{!sessionId && localAvailable && (
 												<button
-													className={`vp-tool ${isHd ? "vp-tool--active" : ""}`}
-													onClick={toggleHd}
-													aria-label={isHd ? "Switch to fast (low-res)" : "Load full resolution"}
+													className={`vp-tool ${isHd || enhance.state === "done" ? "vp-tool--active" : ""} ${enhance.state === "streaming" ? "vp-tool--busy" : ""}`}
+													onClick={() => {
+														// Full-res streams in automatically and swaps in place; the button
+														// is the status + manual trigger, with reload as the failure path.
+														if (isHd) toggleHd();
+														else if (enhance.state === "idle") void runEnhance();
+														else if (enhance.state === "failed") toggleHd();
+													}}
+													aria-label="Full resolution"
 												>
-													<span style={{ fontFamily: "var(--vp-mono)", fontSize: "12px", fontWeight: 700 }}>HD</span>
-													<span className="vp-tool__tip">{isHd ? "Full res · click for fast" : "Load full resolution"}</span>
+													<span style={{ fontFamily: "var(--vp-mono)", fontSize: "12px", fontWeight: 700 }}>
+														{enhance.state === "streaming" ? `${enhance.pct ?? 0}%` : "HD"}
+													</span>
+													<span className="vp-tool__tip">
+														{isHd
+															? "Full res · click for fast"
+															: enhance.state === "streaming"
+																? `Enhancing to full resolution… ${enhance.pct ?? 0}%`
+																: enhance.state === "done"
+																	? "Full resolution ✓"
+																	: enhance.state === "failed"
+																		? "Enhance failed — click to reload in HD"
+																		: "Load full resolution"}
+													</span>
 												</button>
 											)}
 											{/* Organs panel opener (was the "Class Map" button) */}
@@ -1493,17 +1607,61 @@ const flaggedOrgans = useMemo(() => summarizeOutOfRange(statRows), [statRows]);
 
 					<div className={`render ${loading ? "" : "vp-pane vp-pane--render"}`} data-label="3D" style={panelStyle("3d")}>
 						<div className="canvas">
-							{isDicom ? (
+							{threeDMode === "volume" ? (
+								volume3DFailed ? (
+									<div className="vp-3d-empty">
+										Volume rendering isn't available here
+										<span>(needs GPU/WebGL rendering)</span>
+									</div>
+								) : (
+									// Shaded ray-cast rendering of the CT itself (Cornerstone VOLUME_3D).
+									<div className="vp-vol3d" ref={volume3DRef} />
+								)
+							) : isDicom ? (
 								// Meshes come from the case's segmentation on the server — a local
-								// DICOM scan has neither, so show a quiet placeholder instead.
+								// DICOM scan has none.
 								<div className="vp-3d-empty">
-									3D rendering isn't available for local DICOM
-									<span>(requires a segmented dataset case)</span>
+									No organ meshes for local DICOM
+									<span>(switch to Volume rendering above)</span>
 								</div>
 							) : (
 								<SegmentationMeshViewer caseId={caseId} crosshairMm={crosshairMm} checkState={checkState} loading={loading} opacity={opacityValue} />
 							)}
 						</div>
+						{!loading && (
+							<div className="vp-3dbar">
+								{!isDicom && (
+									<button
+										className={`vp-3dbar__btn ${threeDMode === "mesh" ? "is-active" : ""}`}
+										onClick={() => setThreeDMode("mesh")}
+									>
+										Meshes
+									</button>
+								)}
+								<button
+									className={`vp-3dbar__btn ${threeDMode === "volume" ? "is-active" : ""}`}
+									onClick={() => {
+										setThreeDMode("volume");
+										sessionRef.current?.log("view", "Switched 3D pane to volume rendering");
+									}}
+								>
+									Volume
+								</button>
+								{threeDMode === "volume" && !volume3DFailed && (
+									<span className="vp-3dbar__presets">
+										{VOLUME_3D_PRESETS.map((preset) => (
+											<button
+												key={preset.name}
+												className={`vp-3dbar__btn vp-3dbar__btn--preset ${volumePreset === preset.name ? "is-active" : ""}`}
+												onClick={() => setVolumePreset(preset.name)}
+											>
+												{preset.label}
+											</button>
+										))}
+									</span>
+								)}
+							</div>
+						)}
 					</div>
 				</div>
 			</div>
