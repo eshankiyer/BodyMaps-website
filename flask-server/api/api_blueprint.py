@@ -1080,6 +1080,83 @@ def finalize_upload():
         print(f"❌ Finalize upload error: {e}")
         return jsonify({"error": str(e)}), 500
 
+@api_blueprint.route("/upload-dicom-slice", methods=["POST"])
+def upload_dicom_slice():
+    """Save a single DICOM slice to a session-specific temp directory."""
+    try:
+        session_id = request.form.get("session_id")
+        if not session_id:
+            return jsonify({"error": "session_id required"}), 400
+        slice_file = request.files.get("file")
+        if not slice_file:
+            return jsonify({"error": "file required"}), 400
+
+        dicom_dir = os.path.join("/tmp/uploads", session_id, "dicom")
+        os.makedirs(dicom_dir, exist_ok=True)
+        save_path = os.path.join(dicom_dir, slice_file.filename or f"{uuid.uuid4()}.dcm")
+        slice_file.save(save_path)
+        return jsonify({"status": "ok", "filename": os.path.basename(save_path)})
+    except Exception as e:
+        print(f"❌ DICOM slice upload error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@api_blueprint.route("/finalize-dicom", methods=["POST"])
+def finalize_dicom():
+    """Convert an uploaded DICOM series to NIfTI using SimpleITK."""
+    try:
+        import SimpleITK as sitk
+
+        session_id = request.form.get("session_id")
+        if not session_id:
+            return jsonify({"error": "session_id required"}), 400
+
+        dicom_dir = os.path.join("/tmp/uploads", session_id, "dicom")
+        if not os.path.isdir(dicom_dir):
+            return jsonify({"error": "No DICOM slices found for this session"}), 400
+
+        reader = sitk.ImageSeriesReader()
+        series_ids = reader.GetGDCMSeriesIDs(dicom_dir)
+        if not series_ids:
+            return jsonify({"error": "No valid DICOM series found in uploaded files"}), 400
+
+        dicom_names = reader.GetGDCMSeriesFileNames(dicom_dir, series_ids[0])
+        reader.SetFileNames(dicom_names)
+        image = reader.Execute()
+        image = sitk.DICOMOrient(image, "LPS")
+
+        # Save to sessions/inference/<session_id>/<bdmap_id>/ct.nii.gz
+        digits = "".join(ch for ch in (session_id or "") if ch.isdigit())
+        if len(digits) < 8:
+            fallback = f"{(uuid.uuid5(uuid.NAMESPACE_DNS, session_id).int % (10 ** 8)):08d}"
+            digits = (digits + fallback)[:8]
+        else:
+            digits = digits[:8]
+        bdmap_id = f"BDMAP_{digits}"
+
+        base_path = os.path.join(Constants.SESSIONS_DIR_NAME, "inference", session_id)
+        target_dir = os.path.join(base_path, bdmap_id)
+        os.makedirs(target_dir, exist_ok=True)
+        final_path = os.path.join(target_dir, "ct.nii.gz")
+
+        sitk.WriteImage(image, final_path)
+
+        # Clean up temp DICOM slices
+        import shutil
+        shutil.rmtree(os.path.join("/tmp/uploads", session_id), ignore_errors=True)
+
+        uploaded_filename = os.path.relpath(final_path, base_path)
+        return jsonify({
+            "status": "converted",
+            "path": final_path,
+            "bdmap_id": bdmap_id,
+            "uploaded_filename": uploaded_filename,
+        })
+    except Exception as e:
+        print(f"❌ DICOM finalize error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 ## OTHER ENDPOINTS ##
 
 @api_blueprint.route('/ping', methods=['GET'])

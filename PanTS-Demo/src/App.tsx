@@ -12,7 +12,6 @@ import TeamPage from "./routes/TeamPage";
 // download the viewer up front — they only load it when a case is actually opened.
 const VisualizationPage = lazy(() => import("./routes/VisualizationPage"));
 const UploadPage = lazy(() => import("./routes/UploadPage"));
-const ApiPage = lazy(() => import("./routes/ApiPage"));
 const RotatingHeartLoader = lazy(() => import("./components/Loading"));
 
 const BASENAME = import.meta.env.VITE_BASENAME;
@@ -63,7 +62,7 @@ function App() {
 								<Route path="/reconstruction/:reconstructionId" element={<VisualizationPage />} />
 								<Route path="/test" element={<RotatingHeartLoader />} />
 								<Route path="/upload" element={<UploadPage />} />
-								<Route path="/api" element={<ApiPage />} />
+								<Route path="/api" element={<Navigate to="/upload" replace />} />
 									<Route path="/team" element={<TeamPage />} />
 							</Routes>
 						</Suspense>

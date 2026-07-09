@@ -24,17 +24,15 @@ export default function LandingPage() {
   const [organClasses, setOrganClasses] = useState(0);
 
   /* ── active tab ── */
-  const [activeTab, setActiveTab] = useState<"overview" | "dataset" | "upload" | "api" | "team">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "dataset" | "upload" | "team">("overview");
 
   /* ── tab navigation handler ── */
-  const handleTabClick = (tab: "overview" | "dataset" | "upload" | "api" | "team") => {
+  const handleTabClick = (tab: "overview" | "dataset" | "upload" | "team") => {
     setActiveTab(tab);
     if (tab === "dataset") {
       navigate("/dashboard");
     } else if (tab === "upload") {
       navigate("/upload");
-    } else if (tab === "api") {
-      navigate("/api");
     } else if (tab === "team") {
       navigate("/team");
     }
@@ -90,9 +88,6 @@ export default function LandingPage() {
           </button>
           <button className={tabClass("upload")} onClick={() => handleTabClick("upload")}>
             UPLOAD
-          </button>
-          <button className={tabClass("api")} onClick={() => handleTabClick("api")}>
-            API
           </button>
           <button className={tabClass("team")} onClick={() => handleTabClick("team")}>
             TEAM
