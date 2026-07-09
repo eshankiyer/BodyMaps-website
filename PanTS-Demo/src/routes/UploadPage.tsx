@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useCallback, useRef, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './UploadPage.css';
 import { API_BASE } from '../helpers/constants';
@@ -9,6 +9,19 @@ const CtPreview = lazy(() => import('../components/CtPreview/CtPreview'));
 const CHUNK_SIZE = 256 * 1024;
 const NIFTI_EXTS = ['.nii', '.nii.gz'];
 const DICOM_EXTS = ['.dcm', '.dicom'];
+
+const PIPELINE_INFO: Record<string, string> = {
+  // Preprocessing
+  OpenVAE: 'A 3D variational autoencoder pretrained on large CT datasets. Reconstructs and denoises the input scan before segmentation to improve downstream model accuracy.',
+  // Models
+  ePAI: 'Pancreas AI — an nnU-Net based model specialized for pancreatic segmentation including the pancreas, ducts, and pancreatic lesions (PDAC, cysts, PNETs).',
+  SuPreM: 'Universal multi-organ segmentation model pretrained on 25 abdominal structures. Uses a UNet backbone with large-scale supervised pretraining across multiple datasets.',
+  MedFormer: 'Transformer-based segmentation model for 26 abdominal structures plus pancreatic lesions. Leverages attention mechanisms for long-range spatial context.',
+  'R-Super': 'Report-supervised extension of MedFormer. Incorporates radiology report text during training to improve segmentation accuracy on underrepresented structures.',
+  'Atlas-Net': 'Atlas-guided nnU-Net model that uses anatomical priors to improve robustness across varied CT acquisition protocols and patient populations.',
+  // Postprocessing
+  ShapeKit: 'CPU-only shape refinement toolkit. Uses anatomical shape priors and connected-component analysis to clean up segmentation boundaries and remove spurious predictions.',
+};
 
 type JobStatus = 'queued' | 'uploading' | 'processing' | 'completed' | 'failed';
 
@@ -38,6 +51,60 @@ const parseApiResponse = async (res: Response): Promise<any> => {
   if (ct.includes('application/json')) return res.json();
   const text = await res.text();
   throw new Error(`HTTP ${res.status}: ${text.slice(0, 200).replace(/\s+/g, ' ').trim()}`);
+};
+
+type PipelineOption = { value: string; label: string };
+
+const PipelineSelect: React.FC<{
+  value: string;
+  onChange: (v: string) => void;
+  options: PipelineOption[];
+  placeholder?: string;
+}> = ({ value, onChange, options, placeholder }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const selectedLabel = options.find(o => o.value === value)?.label;
+
+  return (
+    <div className={`ps-wrap${open ? ' ps-open' : ''}`} ref={ref}>
+      <button
+        type="button"
+        className={`ps-trigger${value ? ' has-value' : ''}`}
+        onClick={() => setOpen(o => !o)}
+      >
+        <span>{selectedLabel ?? placeholder ?? 'Select…'}</span>
+        <span className="ps-arrow">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="ps-dropdown">
+          {options.map(opt => (
+            <div
+              key={opt.value}
+              className={`ps-option${value === opt.value ? ' ps-option--selected' : ''}`}
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+            >
+              <span className="ps-option-label">{opt.label}</span>
+              {PIPELINE_INFO[opt.value] && (
+                <span className="ps-info-wrap" onClick={e => e.stopPropagation()}>
+                  <span className="ps-info-icon">i</span>
+                  <div className="ps-info-tooltip">{PIPELINE_INFO[opt.value]}</div>
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 };
 
 const UploadPage: React.FC = () => {
@@ -392,14 +459,15 @@ const UploadPage: React.FC = () => {
                 <span className="pipeline-label">Preprocessing</span>
                 <span className="pipeline-optional">optional</span>
               </div>
-              <select
-                className={`pipeline-select${selectedPreprocessing ? ' has-value' : ''}`}
+              <PipelineSelect
                 value={selectedPreprocessing}
-                onChange={e => setSelectedPreprocessing(e.target.value)}
-              >
-                <option value="">None (skip)</option>
-                <option value="OpenVAE">OpenVAE</option>
-              </select>
+                onChange={setSelectedPreprocessing}
+                placeholder="None (skip)"
+                options={[
+                  { value: '', label: 'None (skip)' },
+                  { value: 'OpenVAE', label: 'OpenVAE' },
+                ]}
+              />
             </div>
 
             <div className="pipeline-arrow">→</div>
@@ -409,18 +477,18 @@ const UploadPage: React.FC = () => {
                 <div className="pipeline-badge">2</div>
                 <span className="pipeline-label">Model</span>
               </div>
-              <select
-                className={`pipeline-select${selectedModel ? ' has-value' : ''}`}
+              <PipelineSelect
                 value={selectedModel}
-                onChange={e => setSelectedModel(e.target.value)}
-              >
-                <option value="" disabled>Select a model</option>
-                <option value="ePAI">ePAI</option>
-                <option value="SuPreM">SuPreM</option>
-                <option value="MedFormer">MedFormer</option>
-                <option value="R-Super">R-Super</option>
-                <option value="Atlas-Net">Atlas-Net</option>
-              </select>
+                onChange={setSelectedModel}
+                placeholder="Select a model"
+                options={[
+                  { value: 'ePAI', label: 'ePAI' },
+                  { value: 'SuPreM', label: 'SuPreM' },
+                  { value: 'MedFormer', label: 'MedFormer' },
+                  { value: 'R-Super', label: 'R-Super' },
+                  { value: 'Atlas-Net', label: 'Atlas-Net' },
+                ]}
+              />
             </div>
 
             <div className="pipeline-arrow">→</div>
@@ -431,14 +499,15 @@ const UploadPage: React.FC = () => {
                 <span className="pipeline-label">Postprocessing</span>
                 <span className="pipeline-optional">optional</span>
               </div>
-              <select
-                className={`pipeline-select${selectedPostprocessing ? ' has-value' : ''}`}
+              <PipelineSelect
                 value={selectedPostprocessing}
-                onChange={e => setSelectedPostprocessing(e.target.value)}
-              >
-                <option value="">None (skip)</option>
-                <option value="ShapeKit">ShapeKit</option>
-              </select>
+                onChange={setSelectedPostprocessing}
+                placeholder="None (skip)"
+                options={[
+                  { value: '', label: 'None (skip)' },
+                  { value: 'ShapeKit', label: 'ShapeKit' },
+                ]}
+              />
             </div>
 
             <button

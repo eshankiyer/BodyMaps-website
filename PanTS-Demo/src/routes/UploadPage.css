@@ -205,6 +205,170 @@
   letter-spacing: 0.02em;
   text-transform: none;
 }
+/* ── Custom pipeline select ── */
+.ps-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.ps-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 10px 14px;
+  background: rgba(0,0,0,.04);
+  border: 1px solid rgba(0,0,0,.08);
+  border-radius: 8px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px;
+  color: #8f8f8f;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+  outline: none;
+}
+
+.ps-trigger.has-value {
+  color: #111;
+}
+
+.ps-trigger:hover {
+  border-color: rgba(0,0,0,.15);
+  background-color: rgba(0,0,0,.06);
+}
+
+.ps-arrow {
+  flex-shrink: 0;
+  margin-left: 8px;
+  opacity: 0;
+  width: 0;
+}
+
+.ps-trigger::after {
+  content: '';
+  display: block;
+  width: 10px;
+  height: 6px;
+  flex-shrink: 0;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236a6a6a' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.ps-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,.12);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+  z-index: 200;
+  overflow: visible;
+}
+
+.ps-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px;
+  color: #111;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.ps-option:first-child { border-radius: 8px 8px 0 0; }
+.ps-option:last-child  { border-radius: 0 0 8px 8px; }
+.ps-option:only-child  { border-radius: 8px; }
+
+.ps-option:hover {
+  background: rgba(0,0,0,.05);
+}
+
+.ps-option--selected {
+  background: rgba(0,0,0,.07);
+  color: #111;
+  font-weight: 500;
+}
+
+.ps-option--selected:hover {
+  background: rgba(0,0,0,.10);
+}
+
+.ps-option-label {
+  flex: 1;
+}
+
+/* ── Info icon & tooltip ── */
+.ps-info-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.ps-info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  font-size: 9px;
+  font-style: italic;
+  font-family: Georgia, serif;
+  font-weight: 700;
+  cursor: default;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.ps-info-wrap:hover .ps-info-icon {
+  opacity: 1;
+}
+
+
+.ps-info-tooltip {
+  display: none;
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 210px;
+  background: #111;
+  color: #f5f5f5;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.55;
+  padding: 8px 10px;
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 300;
+  white-space: normal;
+}
+
+.ps-info-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-left-color: #111;
+}
+
+.ps-info-wrap:hover .ps-info-tooltip {
+  display: block;
+}
+
+
 .pipeline-select {
   width: 100%;
   padding: 10px 14px;
@@ -255,6 +419,7 @@
 /* Run button */
 .run-btn {
   flex-shrink: 0;
+  margin-left: 12px;
   padding: 10px 32px;
   background: #002D72;
   border: 1px solid #002D72;
