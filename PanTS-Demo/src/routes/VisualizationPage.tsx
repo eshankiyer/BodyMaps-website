@@ -1598,7 +1598,11 @@ const flaggedOrgans = useMemo(() => summarizeOutOfRange(statRows), [statRows]);
 													</button>
 													<button
 														className="vp-tool"
-														onClick={() => setShowReportScreen(true)}
+														onClick={() => {
+															setShowReportScreen(true);
+															setViewMode("3d");
+															setShowToolbar(false);
+														}}
 														aria-label="Open report"
 													>
 														<IconReport size={20} color="white" />
