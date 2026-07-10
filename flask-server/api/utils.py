@@ -45,8 +45,12 @@ def combine_label_npz(index: int):
     npz_processor.combine_labels(index)
     return
 def get_panTS_id(index):
-    cur_case_id = str(index)
-    iter = max(0, 8 - len(str(index)))
+    index_str = str(index).strip()
+    if not re.fullmatch(r"\d+", index_str):
+        raise ValueError("Invalid case id: numeric value expected")
+
+    cur_case_id = index_str
+    iter = max(0, 8 - len(index_str))
     for _ in range(iter):
         cur_case_id = "0" + cur_case_id
     cur_case_id = "PanTS_" + cur_case_id    
