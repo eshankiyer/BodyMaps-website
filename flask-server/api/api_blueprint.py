@@ -700,7 +700,7 @@ def get_report_data(id):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "An internal error occurred."}), 500
  
  
 @api_blueprint.route('/get-specific-segmentations/<combined_labels_id>', methods=['POST'])
