@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { APP_CONSTANTS } from '../../helpers/constants';
 import FindingsTimeline from './FindingsTimeline';
-import type { MeshManifest } from '../../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -63,10 +62,6 @@ function labelize(organ: string): string {
   return organ
     .replace(/_/g, ' ')
     .replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function fmtVol(v: number) {
-  return v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`;
 }
 
 function getDetail(organ: string, comments: string): string | null {
@@ -310,8 +305,7 @@ function EvidencePanel({
   const impression = getImpressionText(data);
   const report = curOrgan ? getReportMeasurements(curOrgan, data.comments) : null;
   const reportVolume = report?.volumeCc ?? null;
-  const counted = useCountUp(reportVolume ?? 0);
-
+  
   if (step === 1) {
     // On the healthy-organs page, do not show the finding preview.
     // The left panel is the story; the 3D model shifts right to balance the empty space.
@@ -421,6 +415,7 @@ function EvidencePanel({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function ReportScreen({ id, onClose, onViewChange, onOrganHighlight, onClearHighlight, onHideOrgans }: Props) {
+  void onViewChange;
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<Step>(0);
@@ -429,9 +424,6 @@ export default function ReportScreen({ id, onClose, onViewChange, onOrganHighlig
   const [modePromptOpen, setModePromptOpen] = useState(false);
   const [plain2, setPlain2] = useState<string[]>([]);
   const [pLoad, setPLoad] = useState(false);
-  const [manifest, setManifest] = useState<MeshManifest | null>(null);
-  const elapsedRef = useRef(0);
-  const [elapsedDisplay, setElapsedDisplay] = useState(0);
   const startRef = useRef(Date.now());
 
   useEffect(() => {
@@ -447,22 +439,6 @@ export default function ReportScreen({ id, onClose, onViewChange, onOrganHighlig
       })
       .catch(() => setLoading(false));
   }, [id]);
-
-  useEffect(() => {
-    fetch(`${APP_CONSTANTS.API_ORIGIN}/api/cases/${id}/mesh-manifest`)
-      .then(r => r.ok ? r.json() : null)
-      .then(j => { if (j) setManifest(j); })
-      .catch(() => {});
-  }, [id]);
-
-  useEffect(() => {
-    if (!data) return;
-    const t = setInterval(() => {
-      elapsedRef.current = Math.floor((Date.now() - startRef.current) / 1000);
-      setElapsedDisplay(elapsedRef.current);
-    }, 1000);
-    return () => clearInterval(t);
-  }, [data]);
 
   const fetchPlain = useCallback(async () => {
     if (plain2.length || !data) return;
