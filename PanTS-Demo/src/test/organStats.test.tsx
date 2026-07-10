@@ -166,9 +166,11 @@ describe("Organ Statistics — population percentiles", () => {
 	it("shows each organ's volume percentile vs the dataset for the case's sex/age", async () => {
 		renderViewer();
 
-		// The toolbar is hidden by default; reveal it, then open Organ statistics.
+		// The toolbar is hidden by default; reveal it, then open Organ statistics
+		// (grouped under the "Panels" dropdown alongside Organs/Case metadata/Measurements).
 		fireEvent.click(screen.getByLabelText("Toggle toolbar"));
-		fireEvent.click(screen.getByLabelText("Organ statistics"));
+		fireEvent.click(screen.getByLabelText("Panels"));
+		fireEvent.click(screen.getByRole("menuitem", { name: "Organ stats" }));
 
 		// The %ile column header only appears once the norms asset has loaded.
 		expect(await screen.findByText("%ile")).toBeTruthy();
@@ -191,9 +193,11 @@ describe("Organ Statistics — population percentiles", () => {
 
 	it("falls back to an em dash when an organ has no reference or an invalid volume", async () => {
 		renderViewer();
-		// The toolbar is hidden by default; reveal it, then open Organ statistics.
+		// The toolbar is hidden by default; reveal it, then open Organ statistics
+		// (grouped under the "Panels" dropdown alongside Organs/Case metadata/Measurements).
 		fireEvent.click(screen.getByLabelText("Toggle toolbar"));
-		fireEvent.click(screen.getByLabelText("Organ statistics"));
+		fireEvent.click(screen.getByLabelText("Panels"));
+		fireEvent.click(screen.getByRole("menuitem", { name: "Organ stats" }));
 		await screen.findByText("%ile");
 
 		// spleen has no bucket and the kidney volume is flagged → two "—" cells.

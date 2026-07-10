@@ -146,8 +146,16 @@
    Refined dark viewer design system
    One cohesive language for the overlay panels, controls and
    viewports. Tokens first, then components.
+
+   Defined on :root (not .VisualizationPage) so they also reach the toolbar's
+   flyout menus: those render via createPortal into document.body, which in
+   the real DOM sits OUTSIDE .VisualizationPage (only React's virtual tree
+   nests them there) — so a class-scoped custom property is invisible to
+   them and every var(--vp-*) inside a flyout would silently fall back to
+   nothing (e.g. the wrong system font instead of Space Grotesk). :root is
+   the one ancestor guaranteed to contain both.
    ============================================================ */
-.VisualizationPage {
+:root {
   --vp-bg: #08090b;
   --vp-panel: rgba(255, 255, 255, 0.045);
   --vp-panel-strong: rgba(255, 255, 255, 0.07);
@@ -507,13 +515,8 @@
   font-size: 11.5px;
 }
 
-/* Compact adjustment sliders (opacity / brightness / contrast / zoom). */
-.vp-tb-adjust {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 14px;
-}
+/* Opacity / brightness / contrast / zoom sliders — used inside the Adjust ▾ flyout
+   (.vp-flyout--adjust above restyles them to stack full-width there). */
 .vp-tb-slider {
   display: flex;
   align-items: center;
@@ -553,6 +556,20 @@
 .vp-tb-mini:hover {
   color: var(--vp-text);
   border-color: var(--vp-border-strong);
+}
+/* Flyout trigger variant (Layout ▾ / Window ▾): label + chevron, same pill shell. */
+.vp-tb-mini--flyout {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.vp-tb-mini--active {
+  background: #ffffff;
+  color: #08090b;
+  border-color: #ffffff;
+}
+.vp-tb-mini--active:hover {
+  color: #08090b;
 }
 
 /* Tool icon buttons in the bar: slightly smaller, left-aligned, tooltips below. */
@@ -680,30 +697,25 @@
   width: 120px;
 }
 /* Brighter than the default dim toolbar-slider labels — this popup sits on its own,
-   away from the icon row, so FPS should read clearly rather than blend in.
-   Fallback values are required here (not just nice-to-have): the popup is rendered
-   via createPortal into document.body, outside .VisualizationPage where --vp-* are
-   defined, so an unresolved var() with no fallback computes to nothing. */
+   away from the icon row, so FPS should read clearly rather than blend in. */
 .vp-flyout--cine .vp-tb-slider__label {
-  color: var(--vp-accent, #6ea8fe);
+  color: var(--vp-accent);
   font-size: 10px;
 }
 .vp-flyout--cine .vp-tb-slider__val {
   min-width: 26px;
-  color: var(--vp-text, rgba(255, 255, 255, 0.92));
+  color: var(--vp-text);
   font-size: 12px;
   font-weight: 600;
 }
-/* The popup's own Play/Pause button reuses .vp-tool, whose colors are also unscoped
-   --vp-* vars — same portal issue as above, same fix. */
 .vp-flyout--cine .vp-tool--cine-play {
-  background: var(--vp-panel, rgba(255, 255, 255, 0.045));
-  border-color: var(--vp-border, rgba(255, 255, 255, 0.09));
-  color: var(--vp-text, rgba(255, 255, 255, 0.92));
+  background: var(--vp-panel);
+  border-color: var(--vp-border);
+  color: var(--vp-text);
 }
 .vp-flyout--cine .vp-tool--cine-play:hover {
-  background: var(--vp-hover, rgba(255, 255, 255, 0.1));
-  border-color: var(--vp-border-strong, rgba(255, 255, 255, 0.16));
+  background: var(--vp-hover);
+  border-color: var(--vp-border-strong);
 }
 .vp-flyout__item {
   display: flex;
@@ -737,6 +749,36 @@
   color: var(--vp-text-faint);
 }
 .vp-flyout__item.is-active .vp-flyout__kbd { color: inherit; }
+
+/* "Config panel" flyouts (Layout ▾, Window ▾) — reuse the sidebar's segmented-control
+   look (.vp-panel__title section labels + .vp-seg/.vp-seg__btn) inside the dropdown;
+   just a wider min-width than the default .vp-flyout so the segmented rows have room. */
+.vp-flyout--config {
+  min-width: 220px;
+  padding: 10px 12px;
+  gap: 8px;
+}
+
+/* Adjust ▾ — the fill/border/brightness/contrast/zoom sliders + center/reset, stacked
+   full-width in a column instead of the topbar's compact inline row. */
+.vp-flyout--adjust {
+  min-width: 240px;
+  padding: 12px 14px;
+  gap: 12px;
+}
+.vp-flyout--adjust .vp-tb-slider {
+  width: 100%;
+  justify-content: space-between;
+  gap: 10px;
+}
+.vp-flyout--adjust .vp-range {
+  width: 100%;
+  flex: 1 1 auto;
+}
+.vp-flyout--adjust__actions {
+  display: flex;
+  gap: 6px;
+}
 
 /* Reading-session toolbar button while recording: red + pulsing */
 .vp-tool--rec {
@@ -799,40 +841,50 @@
 
 /* ---- Per-pane slice scrollbar + "current/total" caption (bottom right) ---- */
 /* A horizontal <input type="range"> rotated into a vertical scrollbar pinned to the
-   pane's right edge. Rotation happens around the element's own center, so its layout
-   box (before rotation) is sized/positioned as if horizontal — width below becomes the
-   rendered height. */
+   pane's right edge. Rotation happens around the element's own center (transform-origin
+   stays the default center), so centering it against the edge has to account for the
+   pre-rotation box, not the rotated one: with `right` measured on the unrotated box,
+   the visual (post-rotation) center sits at `paneWidth - right - trackLength/2`, and the
+   visual right edge of the thin/thick post-rotation dimension is that value + track/2.
+   Solving `visualRightEdge == paneWidth - edgeGap` for `right` gives the formula below —
+   it comes out negative (pushing the unrotated box's positioning past the pane's own
+   right edge) because the box's *pre-rotation width* is the long track dimension, and
+   half of that has to be cancelled out to bring the rotated bar back to the edge.
+   edgeGap(8) + track/2(3) - length/2(100, at the 200px cap) = -89px. */
 .vp-slice-scrollbar {
   position: absolute;
   top: 50%;
-  right: 6px;
+  right: -89px;
   z-index: 6;
-  width: 65%;
-  max-width: 220px;
-  height: 4px;
+  width: 55%;
+  max-width: 200px;
+  height: 6px;
   transform: translateY(-50%) rotate(-90deg);
   transform-origin: center center;
   -webkit-appearance: none;
   appearance: none;
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
   outline: none;
   cursor: pointer;
 }
+/* Thumb is elongated along the (pre-rotation) track axis — after the -90deg rotation
+   that reads as a tall pill, like a native scrollbar thumb, instead of a round slider
+   handle. */
 .vp-slice-scrollbar::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
+  width: 26px;
+  height: 11px;
+  border-radius: 5px;
   background: #ffffff;
   border: 0;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 .vp-slice-scrollbar::-moz-range-thumb {
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
+  width: 26px;
+  height: 11px;
+  border-radius: 5px;
   background: #ffffff;
   border: 0;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
@@ -1300,6 +1352,47 @@
 .vp-stats__detail-item span:last-child {
   font-size: 11px;
   color: var(--vp-text-dim);
+}
+
+/* ---- Case metadata panel — shares the .vp-stats dock shell (right of the stage) ---- */
+.vp-meta__list {
+  overflow-y: auto;
+  padding: 8px 16px 16px;
+  display: flex;
+  flex-direction: column;
+}
+.vp-meta__list::-webkit-scrollbar { width: 8px; }
+.vp-meta__list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 99px;
+}
+.vp-meta__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border-radius: 8px;
+}
+/* Same alternating-row treatment as the organ statistics table, for a consistent feel
+   between the two docked panels. */
+.vp-meta__row--odd {
+  background: rgba(255, 255, 255, 0.03);
+}
+.vp-meta__label {
+  font-family: var(--vp-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--vp-text-faint);
+  white-space: nowrap;
+}
+.vp-meta__value {
+  font-family: var(--vp-font);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vp-text);
+  text-align: right;
 }
 
 /* ---- Floating organ tooltip ---- */
