@@ -59,9 +59,11 @@ ssh visitor@bdmap1.wse.jhu.edu
 ```
 
 #### 1. Pull latest changes
+Production must always deploy from `main`. Confirm the branch first, then pull.
 ```
 cd /home/visitor/PanTS-Viewer
 git fetch
+git checkout main
 git pull
 ```
 
@@ -72,8 +74,9 @@ cd /home/visitor/PanTS-Viewer/PanTS-Demo && npm ci && npm run build
 
 #### 3. Restart the backend
 ```
-# Kill the old gunicorn process
-kill $(pgrep -f "gunicorn.*app:app")
+# Stop the old gunicorn process and wait for the port to free
+pkill -f "gunicorn.*app:app"; sleep 2
+pgrep -f "gunicorn.*app:app" && echo "still running - rerun the line above" || echo "port clear"
 
 # Start a new gunicorn process
 nohup /home/visitor/.conda/envs/PanTS_backend/bin/gunicorn \
@@ -85,8 +88,13 @@ echo "PID: $!"
 ```
 
 #### 4. Verify the backend is running
+Give it a few seconds to load, then check the backend booted, the dataset loads, and masks serve (all three must succeed).
 ```
-sleep 3 && curl http://127.0.0.1:8000/api/ping
+sleep 8
+curl http://127.0.0.1:8000/api/ping
+curl -s "http://127.0.0.1:8000/api/search?limit=1" | head -c 120; echo
+curl -s -o /dev/null -w "segmentations: %{http_code}\n" "http://127.0.0.1:8000/api/get-segmentations/17.nii.gz"
 ```
+Expect `{"message":"pong"}`, a JSON object with `items`, and `segmentations: 200`. If the backend fails to boot, check the log for the traceback.
 
 Logs are written to `/tmp/gunicorn.log`.

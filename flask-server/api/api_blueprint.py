@@ -760,10 +760,17 @@ async def get_segmentations(combined_labels_id):
     try:
         serve_path = nifti_path
         if img.get_data_dtype() != np.uint8:
-            # The source is a float label map; Cornerstone needs uint8. Write the
-            # converted copy to a sibling file and serve THAT — never overwrite the
-            # original ground-truth mask on disk (an HTTP GET must not mutate data).
-            converted_path = nifti_path.replace('.nii.gz', '_uint8.nii.gz')
+            # The source is a float label map; Cornerstone needs uint8. Cache the
+            # converted copy in a WRITABLE temp dir and serve THAT — never write
+            # into the dataset's mask_only/ (it is read-only on the server, and an
+            # HTTP GET must not mutate ground-truth data). Writing the sibling into
+            # mask_only/ 500'd the segmentation endpoint in production.
+            cache_dir = "/tmp/pants_uint8"
+            os.makedirs(cache_dir, exist_ok=True)
+            converted_path = os.path.join(
+                cache_dir,
+                f"{get_panTS_id(secure_filename(combined_labels_id))}_combined_labels_uint8.nii.gz",
+            )
             if not os.path.exists(converted_path):
                 print("⚠️ Detected float label map, converting to uint8 for Cornerstone compatibility...")
                 raw = np.asanyarray(img.dataobj)
