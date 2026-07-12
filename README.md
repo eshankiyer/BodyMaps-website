@@ -9,7 +9,7 @@ conda activate PanTS_backend
 #### Set up environment backend
 ```
 cd flask-server
-touch .env // makes .env file
+touch .env  # creates the .env file
 nano .env
 ```
 
