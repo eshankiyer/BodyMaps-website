@@ -66,6 +66,7 @@ function App() {
 								<Route path="/reconstruction/:reconstructionId" element={<VisualizationPage />} />
 								<Route path="/test" element={<RotatingHeartLoader />} />
 								<Route path="/upload" element={<UploadPage />} />
+								<Route path="/api" element={<Navigate to="/upload" replace />} />
 									<Route path="/team" element={<TeamPage />} />
 									<Route path="/compare" element={<ComparePage />} />
 									<Route path="/compare-viewer" element={<CompareViewerPage />} />
