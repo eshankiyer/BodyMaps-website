@@ -3227,13 +3227,27 @@ def save_edited_mask(case_id):
         # The viewer always sends gzipped NIfTI; check the gzip magic bytes.
         if len(data) < 2 or data[0] != 0x1F or data[1] != 0x8B:
             return jsonify({"error": "Expected a gzipped NIfTI (.nii.gz) file."}), 400
-
+        
         out_dir = _edited_masks_dir(case_id)
         os.makedirs(out_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"combined_labels_edited_{timestamp}.nii.gz"
         with open(os.path.join(out_dir, filename), "wb") as f:
             f.write(data)
+        # Side car carrying custom class names/colors
+        # the .nii.gz only stores integer labels, so this saves user-created class names/colors
+        labels_field = request.files.get("labels")
+        if labels_field is not None:
+            labels_data = labels_field.read(1024 * 1024)
+            try:
+                parsed = json.loads(labels_data.decode("utf-8"))
+            except Exception:
+                parsed = None
+            if isinstance(parsed, dict):
+                labels_filename = filename.replace(".nii.gz", "_labels.json")
+                with open(os.path.join(out_dir, labels_filename), "w") as f:
+                    json.dump(parsed, f)
+
         return jsonify({"saved": True, "filename": filename, "bytes": len(data)})
     except Exception as error:
         print("[save_edited_mask error]", type(error).__name__, error)
@@ -3261,7 +3275,25 @@ def list_edited_masks(case_id):
         print("[list_edited_masks error]", type(error).__name__, error)
         return jsonify({"error": "Failed to list edited masks."}), 500
 
-
+@api_blueprint.route('/get-edited-labels/<case_id>', methods=['GET'])
+def get_edited_labels(case_id):
+    """Latest saved custom-class name/color sidecar for a case, if any."""
+    try:
+        out_dir = _edited_masks_dir(case_id)
+        if not os.path.isdir(out_dir):
+            return jsonify({})
+        candidates = sorted(
+            (n for n in os.listdir(out_dir) if n.endswith("_labels.json")),
+            reverse=True,
+        )
+        if not candidates:
+            return jsonify({})
+        with open(os.path.join(out_dir, candidates[0]), "r") as f:
+            data = json.load(f)
+        return jsonify(data if isinstance(data, dict) else {})
+    except Exception as error:
+        print("[get_edited_labels error]", type(error).__name__, error)
+        return jsonify({})
 # ---------------------------------------------------------------------------
 # Advanced analysis (viewer's AI-segment tool + vessel CPR panel).
 # Additive and read-only against the dataset — loads image_only/ and mask_only/
