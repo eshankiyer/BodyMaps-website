@@ -62,6 +62,7 @@ import {
     captureViewportImages,
     centerOnCursor,
     clearMeasurements,
+    createNewAnnotationClass,
     disableVolume3D,
     EDIT_BRUSH,
     EDIT_ERASER,
@@ -104,6 +105,7 @@ import {
     VOLUME_3D_PRESETS,
     VOLUME_3D_PRESETS_MR,
     zoomToFit,
+	getCustomSegmentLabels,
     type CinePane,
     type PrimaryMouseToolName,
     type SliceInfo
@@ -214,6 +216,16 @@ const fmtStat = (v: number | null, digits = 0): string => (v === null ? "—" : 
 // Falls back to a neutral gray if a label has no LUT entry (shouldn't happen in practice).
 const colorToCss = (c: Color | undefined): string =>
 	c ? `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${(c[3] ?? 255) / 255})` : "rgba(255, 255, 255, 0.4)";
+
+// Resolves a segment index to a display name for BOTH the static 32 organ
+// catalog and any runtime-created custom classes (segment indices beyond
+// segmentation_categories.length, eg., from "New class" in annotations tool).
+
+const resolveOrganLabel = (idx: number): string | undefined => {
+    const staticName = segmentation_categories[idx - 1];
+    if (staticName) return filenameToName(staticName);
+    return getCustomSegmentLabels()[idx];
+};
 
 const CT_PRESETS = [
 	{ name: "Soft Tissue", width: 400, center: 40 },
@@ -432,7 +444,7 @@ function VisualizationPage() {
 	const [showOrganDetails, setShowOrganDetails] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [crosshairMm, setCrosshairMm] = useState<[number, number, number] | null>(null);
-	const [labelColorMap, _setLabelColorMap] = useState<{ [key: number]: Color }>(
+	const [labelColorMap, setLabelColorMap] = useState<{ [key: number]: Color }>(
 		segmentation_category_colors
 	);
 	const [zoomLevel, setZoomLevel] = useState(1);
@@ -996,6 +1008,7 @@ function VisualizationPage() {
 			setRenderingEngine(renderingEngine);
 			setViewportIds(viewportIds);
 			setVolumeId(volumeId);
+
 			// const { nv, cmapCopy } = await create3DVolume(
 			// 	render_ref,
 			// 	segUrl,
@@ -1025,7 +1038,8 @@ function VisualizationPage() {
 		axial_ref,
 		sagittal_ref,
 		coronal_ref,
-		labelColorMap,
+		// labelColorMap intentionally excluded — creating a new class updates
+		// this map and would otherwise retrigger the CT/volume setup effect.
 	]);
 	// Toggle checkbox state
 	//   useEffect(() => {
@@ -1575,6 +1589,14 @@ demographics?.age ?? null
 );
 const flaggedOrgans = useMemo(() => summarizeOutOfRange(statRows), [statRows]);
 
+// Classes created at runtime via "New class" — anything in checkBoxData whose id
+// falls outside the static 32-organ catalog. Fed to OrganCheckbox as a separate
+// section, since the fixed OrganSystems map has no slot for them.
+const customOrgans = useMemo(
+    () => checkBoxData.filter((o) => o.id > segmentation_categories.length),
+    [checkBoxData]
+);
+
 const aiAvailableOrgans = useMemo(() => {
 	const measuredOrgans = (organStats ?? [])
 		.filter((metric) =>
@@ -1602,6 +1624,29 @@ const aiAvailableOrgans = useMemo(() => {
 		}
 	};
 
+	// hex "#rrggbb" convert to Cornerstone's [r,g,b,a] Color (0 to 255)
+	const hexToColor = (hex: string): Color => {
+		const n = parseInt(hex.slice(1), 16);
+		return [(n >> 16) & 255, (n >> 8) & 255, n & 255, 255]; // Isolate red, blue, green, all values
+	};
+
+	const handleCreateClass = (name: string, colorHex: string): CheckBoxData | null => {
+		const result = createNewAnnotationClass(name, hexToColor(colorHex));
+		if (!result) return null;
+	
+		const newOrgan: CheckBoxData = { id: result.segmentIndex, label: name };
+		setCheckBoxData((prev) => [...prev, newOrgan]);
+		setCheckState((prev) => {
+			const next = [...prev];
+			next[result.segmentIndex] = true;
+			return next;
+		});
+		setLabelColorMap((prev) => ({ ...prev, [result.segmentIndex]: result.color }));
+	
+		sessionRef.current?.log("edit", `Created new class "${name}"`, 2000);
+		return newOrgan;
+	};
+
 	const handleMouseClick = async (e: MouseEvent) => {
 		const idx = getOrganLabelOnClick();
 		if (idx === undefined || typeof idx !== "number") {
@@ -1613,7 +1658,7 @@ const aiAvailableOrgans = useMemo(() => {
 			})
 			return;
 		};
-		const label = segmentation_categories[idx - 1];
+		const label = resolveOrganLabel(idx) ?? "Unknown";
 		setToolTip({
 			visible: true,
 			x: e.clientX + 10,
@@ -1632,12 +1677,12 @@ const aiAvailableOrgans = useMemo(() => {
 			setHoverOrganTip((t) => (t.visible ? { ...t, visible: false } : t));
 			return;
 		}
-		const rawLabel = segmentation_categories[idx - 1];
+		const rawLabel = resolveOrganLabel(idx);
 		setHoverOrganTip({
 			visible: true,
 			x: e.clientX + 14,
 			y: e.clientY + 14,
-			text: rawLabel ? filenameToName(rawLabel) : "Unknown",
+			text: rawLabel?? "Unknown",
 			// Same LUT the mask overlay is rendered with, so the swatch/border always
 			// matches the color the organ is actually painted in the pane.
 			color: colorToCss(labelColorMap[idx]),
@@ -2416,6 +2461,7 @@ const aiAvailableOrgans = useMemo(() => {
 						showOrganDetails={showOrganDetails}
 						labelColorMap={labelColorMap}
 						onJumpToOrgan={handleJumpToOrgan}
+						customOrgans={customOrgans}
 					/>
 				)}
 
@@ -2523,7 +2569,7 @@ const aiAvailableOrgans = useMemo(() => {
 									<span>(switch to Volume rendering above)</span>
 								</div>
 							) : (
-								<SegmentationMeshViewer caseId={caseId} crosshairMm={crosshairMm} checkState={checkState} loading={loading} opacity={opacityValue} />
+								<SegmentationMeshViewer caseId={caseId} crosshairMm={crosshairMm} checkState={checkState} loading={loading} opacity={opacityValue} customOrgans={customOrgans} labelColorMap={labelColorMap} />
 							)}
 						</div>
 						{!loading && (
@@ -2788,6 +2834,7 @@ const aiAvailableOrgans = useMemo(() => {
 						setEditMode(null);
 					}}
 					onEdit={(detail) => sessionRef.current?.log("edit", detail, 2000)}
+					onCreateClass={handleCreateClass}
 				/>
 			)}
 

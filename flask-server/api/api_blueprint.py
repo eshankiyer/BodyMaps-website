@@ -3227,13 +3227,27 @@ def save_edited_mask(case_id):
         # The viewer always sends gzipped NIfTI; check the gzip magic bytes.
         if len(data) < 2 or data[0] != 0x1F or data[1] != 0x8B:
             return jsonify({"error": "Expected a gzipped NIfTI (.nii.gz) file."}), 400
-
+        
         out_dir = _edited_masks_dir(case_id)
         os.makedirs(out_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"combined_labels_edited_{timestamp}.nii.gz"
         with open(os.path.join(out_dir, filename), "wb") as f:
             f.write(data)
+        # Side car carrying custom class names/colors
+        # the .nii.gz only stores integer labels, so this saves user-created class names/colors
+        labels_field = request.files.get("labels")
+        if labels_field is not None:
+            labels_data = labels_field.read(1024 * 1024)
+            try:
+                parsed = json.loads(labels_data.decode("utf-8"))
+            except Exception:
+                parsed = None
+            if isinstance(parsed, dict):
+                labels_filename = filename.replace(".nii.gz", "_labels.json")
+                with open(os.path.join(out_dir, labels_filename), "w") as f:
+                    json.dump(parsed, f)
+
         return jsonify({"saved": True, "filename": filename, "bytes": len(data)})
     except Exception as error:
         print("[save_edited_mask error]", type(error).__name__, error)
