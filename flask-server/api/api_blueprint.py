@@ -836,7 +836,10 @@ _inference_jobs_lock = threading.Lock()
 
 
 def _job_meta_path(session_id):
-    return os.path.join(SESSIONS_DIR, session_id, "job.json")
+    # secure_filename is the CodeQL-recognised path-injection barrier (see
+    # path_safety.py): session_id reaches the filesystem here, so sanitize it
+    # at the construction site. Real ids are UUIDs, which pass through intact.
+    return os.path.join(SESSIONS_DIR, secure_filename(session_id), "job.json")
 
 
 def _persist_inference_job(session_id, snapshot):
@@ -847,9 +850,8 @@ def _persist_inference_job(session_id, snapshot):
     write-temp-then-rename so a crash mid-write can't leave a corrupt file.
     """
     try:
-        session_dir = os.path.join(SESSIONS_DIR, session_id)
-        os.makedirs(session_dir, exist_ok=True)
-        path = _job_meta_path(session_id)
+        path = _job_meta_path(session_id)  # sanitized via secure_filename
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         tmp = path + ".tmp"
         with open(tmp, "w") as f:
             json.dump(snapshot, f, default=str)
@@ -1130,8 +1132,9 @@ def cancel_inference_session(session_id):
             print(f"[cancel] kill failed for {session_id}: {e}")
         return jsonify({"status": "cancelled", "session_id": session_id}), 200
     except Exception as e:
+        # Log the detail server-side; don't leak internals to the client.
         print(f"❌ [Cancel Error] {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Failed to cancel inference"}), 500
 
 
 @api_blueprint.route('/check-inference-status', methods=['GET'])
