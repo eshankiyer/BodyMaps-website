@@ -6,7 +6,6 @@ const MODEL_OPTIONS: { id: string; label: string; desc: string }[] = [
   { id: "MedFormer", label: "MedFormer",  desc: "For reliable abdominal segmentation" },
   { id: "R-Super",   label: "R-Super",    desc: "For the highest tumor detection accuracy" },
   { id: "Atlas-Net", label: "Atlas-Net",  desc: "For anatomically consistent results" },
-  { id: "Testing",   label: "Testing",    desc: "Local 20-second dry run" },
 ];
 import { useNavigate } from 'react-router-dom';
 import './UploadPage.css';
@@ -32,25 +31,6 @@ import {
   setPendingNextChunk,
   type PendingUpload,
 } from '../helpers/pendingUploads';
-
-const TESTING_LS_KEY = "uploadTestingSessions";
-const TESTING_DURATION_MS = 20_000;
-
-// sessionId → startedAt (ms). A map so several Testing runs can be in flight.
-const loadTestingSessions = (): Record<string, number> => {
-  try {
-    return JSON.parse(localStorage.getItem(TESTING_LS_KEY) || "{}") || {};
-  } catch { return {}; }
-};
-
-const saveTestingSession = (sessionId: string, startedAt: number) =>
-  localStorage.setItem(TESTING_LS_KEY, JSON.stringify({ ...loadTestingSessions(), [sessionId]: startedAt }));
-
-const clearTestingSession = (sessionId: string) => {
-  const sessions = loadTestingSessions();
-  delete sessions[sessionId];
-  localStorage.setItem(TESTING_LS_KEY, JSON.stringify(sessions));
-};
 
 const parseApiResponse = async (res: Response): Promise<any> => {
   const contentType = res.headers.get("content-type") || "";
@@ -100,7 +80,7 @@ const UploadPage: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [inferenceCompleted, setInferenceCompleted] = useState<boolean>(false);
-  const [selectedModel, setSelectedModel] = useState<"ePAI" | "SuPreM" | "OpenVAE" | "MedFormer" | "R-Super" | "Atlas-Net" | "Testing" | "">("");
+  const [selectedModel, setSelectedModel] = useState<"ePAI" | "SuPreM" | "OpenVAE" | "MedFormer" | "R-Super" | "Atlas-Net" | "">("");
   const [modelDropOpen, setModelDropOpen] = useState(false);
   const modelDropRef = useRef<HTMLDivElement>(null);
   const [preDropOpen, setPreDropOpen] = useState(false);
@@ -246,19 +226,8 @@ const UploadPage: React.FC = () => {
     pollTimersRef.current.set(sid, timer);
   };
 
-  const startTestingTimer = (sid: string, startedAt: number) => {
-    stopPolling(sid);
-    const timer = setInterval(() => {
-      if (Date.now() - startedAt >= TESTING_DURATION_MS) {
-        clearTestingSession(sid);
-        finishSession(sid, "Testing");
-      }
-    }, 200);
-    pollTimersRef.current.set(sid, timer);
-  };
-
-  // Cancel one run, whatever phase it's in: aborts an in-flight upload, kills
-  // a queued/running server job, or just stops a Testing dry run.
+  // Cancel one run, whatever phase it's in: aborts an in-flight upload or
+  // kills a queued/running server job.
   const cancelRun = (upload: RecentUpload) => {
     const sid = upload.sessionId;
     stopPolling(sid);
@@ -268,13 +237,9 @@ const UploadPage: React.FC = () => {
     if (controller) controller.abort();
     deletePendingUpload(sid);
 
-    if (upload.model === "Testing") {
-      clearTestingSession(sid);
-    } else {
-      // Fire-and-forget: if the job never reached the server (upload phase)
-      // this 404s, which is fine — the client side is already torn down.
-      fetch(`${API_BASE}/api/cancel-inference/${sid}`, { method: "POST" }).catch(() => {});
-    }
+    // Fire-and-forget: if the job never reached the server (upload phase)
+    // this 404s, which is fine — the client side is already torn down.
+    fetch(`${API_BASE}/api/cancel-inference/${sid}`, { method: "POST" }).catch(() => {});
 
     if (foregroundUploadSidRef.current === sid) {
       foregroundUploadSidRef.current = null;
@@ -292,33 +257,21 @@ const UploadPage: React.FC = () => {
     let cancelled = false;
     (async () => {
       const processing = loadRecentUploads().filter(u => u.status === "Processing");
-      const testingSessions = loadTestingSessions();
       const pending = await loadPendingUploads();
       if (cancelled) return;
       const pendingById = new Map(pending.map(p => [p.sessionId, p]));
 
       for (const u of processing) {
-        if (u.model === "Testing") {
-          const startedAt = testingSessions[u.sessionId];
-          if (startedAt == null) {
-            setRecentUploads(updateRecentUploadStatus(u.sessionId, "Failed"));
-          } else if (Date.now() - startedAt >= TESTING_DURATION_MS) {
-            clearTestingSession(u.sessionId);
-            finishSession(u.sessionId, "Testing");
-          } else {
-            startTestingTimer(u.sessionId, startedAt);
-          }
-        } else if (pendingById.has(u.sessionId)) {
+        if (pendingById.has(u.sessionId)) {
           runUpload(pendingById.get(u.sessionId)!, false);  // resume the upload
         } else {
           startInferencePolling(u.sessionId, u.model);       // resume polling
         }
       }
 
-      // Clean up storage entries whose card no longer exists (deleted or
-      // trimmed off the 8-entry list) so neither store can leak.
+      // Clean up IndexedDB entries whose card no longer exists (deleted or
+      // trimmed off the 8-entry list) so the store can't leak.
       const known = new Set(loadRecentUploads().map(u => u.sessionId));
-      Object.keys(testingSessions).filter(sid => !known.has(sid)).forEach(clearTestingSession);
       pending.filter(p => !known.has(p.sessionId)).forEach(p => deletePendingUpload(p.sessionId));
 
       if (processing.length > 0) {
@@ -476,27 +429,6 @@ const UploadPage: React.FC = () => {
 
   /* ── Run inference ── */
   const handleRunEpaiInference = async () => {
-    if (selectedModel === "Testing") {
-      const sid = crypto.randomUUID();
-      const startedAt = Date.now();
-      setSessionId(sid);
-      setMessage("Testing mode — 20-second dry run");
-      setInferenceCompleted(false);
-      setRecentUploads(
-        addRecentUpload({
-          sessionId: sid,
-          label: selectedFiles[0]?.name || "Testing run",
-          model: "Testing",
-          status: "Processing",
-          timestamp: startedAt,
-        })
-      );
-      if (selectedFiles.length > 0) setSelectedFiles(prev => prev.slice(1));
-      saveTestingSession(sid, startedAt);
-      startTestingTimer(sid, startedAt);
-      return;
-    }
-
     const file = selectedFiles[0] ?? null;
     const path = serverPath.trim();
     if (!file && !path) {
