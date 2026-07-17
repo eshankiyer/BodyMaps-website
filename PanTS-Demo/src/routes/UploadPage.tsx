@@ -79,7 +79,7 @@ const UploadPage: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [inferenceCompleted, setInferenceCompleted] = useState<boolean>(false);
-  const [selectedModel, setSelectedModel] = useState<"None" | "ePAI" | "SuPreM" | "OpenVAE" | "MedFormer" | "R-Super" | "Atlas-Net" | "">("");
+  const [selectedModel, setSelectedModel] = useState<"None" | "ePAI" | "SuPreM" | "OpenVAE" | "MedFormer" | "R-Super" | "Atlas-Net" | "">("None");
   const [modelDropOpen, setModelDropOpen] = useState(false);
   const modelDropRef = useRef<HTMLDivElement>(null);
   const [preDropOpen, setPreDropOpen] = useState(false);
@@ -886,7 +886,7 @@ const UploadPage: React.FC = () => {
                   onClick={() => setModelDropOpen(o => !o)}
                   type="button"
                 >
-                  <span>{selectedModel || 'Select a model'}</span>
+                  <span>{selectedModel === 'None' ? 'None (view scan)' : MODEL_OPTIONS.find(m => m.id === selectedModel)?.label || 'Select a model'}</span>
                   <svg className={`model-dropdown-chevron${modelDropOpen ? ' rotated' : ''}`} width="10" height="6" viewBox="0 0 10 6" fill="none">
                     <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
