@@ -72,6 +72,7 @@ import {
     FREEHAND_ROI_TOOL,
     getCrosshairMm,
     getCurrentVolumeModality,
+    getCustomSegmentLabels,
     getMeasurementSummaries,
     getOrganCentroids,
     getOrganLabelAtPoint,
@@ -105,14 +106,13 @@ import {
     VOLUME_3D_PRESETS,
     VOLUME_3D_PRESETS_MR,
     zoomToFit,
-	getCustomSegmentLabels,
     type CinePane,
     type PrimaryMouseToolName,
     type SliceInfo
 } from "../helpers/CornerstoneNifti2";
 import { getLocalDicomFiles, loadLocalDicomSeries } from "../helpers/dicomLocal";
-import { loadLocalNiftiAsRawBlobUrl } from "../helpers/localNifti";
 import { downloadUrlAsFile } from "../helpers/downloadFile";
+import { loadLocalNiftiAsRawBlobUrl } from "../helpers/localNifti";
 import {
     describeBasis,
     loadOrganNorms,
@@ -2755,7 +2755,7 @@ const aiAvailableOrgans = useMemo(() => {
 														</span>
 													)}
 												</span>
-												<span>{r.volume_cm3 === null ? "NA" : `${Math.round(r.volume_cm3)} cm³`}</span>
+												<span>{r.volume_cm3 === null || r.truncated ? "NA" : `${Math.round(r.volume_cm3)} cm³`}</span>
 												<span>{r.mean_hu === null ? "NA" : Math.round(r.mean_hu)}</span>
 												{organNorms && (
 													<span
@@ -2805,7 +2805,7 @@ const aiAvailableOrgans = useMemo(() => {
 													</div>
 													<div className="vp-stats__detail-item">
 														<span>Voxel Count</span>
-														<span>{r.voxel_count === null ? "—" : r.voxel_count.toLocaleString()}</span>
+														<span>{r.voxel_count === null || r.truncated ? "—" : r.voxel_count.toLocaleString()}</span>
 													</div>
 													<div className="vp-stats__detail-item">
 														<span>Truncated</span>
