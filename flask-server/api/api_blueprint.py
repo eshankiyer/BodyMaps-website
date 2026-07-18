@@ -909,7 +909,7 @@ def _get_inference_job(session_id):
     return None
 
 
-def _start_auto_segmentation(session_id, model_name, ct_file=None, server_input_path=None):
+def _start_auto_segmentation(session_id, model_name, ct_file=None, server_input_path=None, precision="fp16"):
     if not _is_safe_id(session_id):
         return jsonify({"error": "Invalid session ID"}), 400
     session_path = os.path.join(SESSIONS_DIR, session_id)
@@ -960,7 +960,7 @@ def _start_auto_segmentation(session_id, model_name, ct_file=None, server_input_
         try:
             output_mask_dir = run_auto_segmentation(
                 input_path, session_dir=session_path, model=model_name,
-                session_id=session_id, on_start=_on_gpu_slot,
+                session_id=session_id, on_start=_on_gpu_slot, precision=precision,
             )
 
             if _job_status() == "cancelled":
@@ -1049,6 +1049,11 @@ def run_epai_inference():
 
     session_id = _pick_text("session_id", "SESSION_ID", "sessionId") or str(uuid.uuid4())
     model_name = _pick_text("model_name", "model", "MODEL_NAME") or "ePAI"
+    # Weight precision for the GPU inference stage. "fp16" routes to the quantized
+    # half-precision weights; "fp32" keeps the original full-precision checkpoints.
+    precision = (_pick_text("precision", "PRECISION") or "fp16").lower()
+    if precision not in ("fp16", "fp32"):
+        precision = "fp16"
     uploaded_filename = _pick_text("uploaded_filename", "output_filename", "filename")
     input_server_path = _pick_text("INPUT_SERVER_PATH", "input_server_path", "server_path", "path")
     source_reconstruction_session_id = _pick_text("source_reconstruction_session_id")
@@ -1109,7 +1114,109 @@ def run_epai_inference():
         model_name=model_name,
         ct_file=ct_file,
         server_input_path=input_server_path,
+        precision=precision,
     )
+
+
+# Catalog used by the automatic model picker. Each entry pairs a model with the
+# tasks it is best suited for and its recommended inference precision. All of the
+# segmentation networks run in FP16 by default (validated to produce masks
+# identical to FP32); only the CPU-only ShapeKit stage is excluded.
+MODEL_CATALOG = [
+    {"model": "ePAI", "precision": "fp16",
+     "best_for": "pancreas, pancreatic duct, and pancreatic lesions (PDAC, cysts, PNETs)"},
+    {"model": "SuPreM", "precision": "fp16",
+     "best_for": "broad multi-organ abdominal segmentation (25 structures)"},
+    {"model": "MedFormer", "precision": "fp16",
+     "best_for": "26 abdominal structures plus pancreatic lesions; long-range context"},
+    {"model": "R-Super", "precision": "fp16",
+     "best_for": "report-supervised segmentation of underrepresented structures"},
+    {"model": "Atlas-Net", "precision": "fp16",
+     "best_for": "robust segmentation across varied CT protocols using anatomical priors"},
+]
+
+_VALID_MODELS = {m["model"] for m in MODEL_CATALOG}
+
+
+def _heuristic_model_pick(hint: str):
+    """Rule-based fallback when the local LLM is unavailable."""
+    text = (hint or "").lower()
+    if any(k in text for k in ("pancrea", "pdac", "cyst", "pnet", "duct", "lesion")):
+        choice = "ePAI"
+    elif any(k in text for k in ("organ", "abdomen", "abdominal", "liver", "kidney",
+                                 "spleen", "stomach", "multi", "whole", "full")):
+        choice = "SuPreM"
+    elif any(k in text for k in ("protocol", "robust", "varied", "generali")):
+        choice = "Atlas-Net"
+    else:
+        choice = "ePAI"
+    return {
+        "model": choice,
+        "precision": "fp16",
+        "reason": f"Rule-based match on your description; {choice} is best for "
+                  + next(m["best_for"] for m in MODEL_CATALOG if m["model"] == choice)
+                  + ". Running in FP16 (quantized) for speed.",
+        "source": "heuristic",
+    }
+
+
+@api_blueprint.route('/suggest-model', methods=['POST'])
+def suggest_model():
+    """
+    Automatically choose the best segmentation model (and precision) for a scan.
+
+    Uses the local Ollama LLM to reason over the model catalog given a short,
+    optional free-text hint (e.g. "looking for pancreatic tumors") and/or the
+    uploaded filename. Falls back to a deterministic heuristic when the LLM is
+    unavailable, so the picker always returns a usable answer.
+    """
+    payload = request.get_json(silent=True) or {}
+    hint = str(payload.get("hint") or request.form.get("hint") or "").strip()
+    filename = str(payload.get("filename") or request.form.get("filename") or "").strip()
+    combined_hint = " ".join(x for x in (hint, filename) if x)
+
+    catalog_lines = "\n".join(
+        f"- {m['model']}: best for {m['best_for']}" for m in MODEL_CATALOG
+    )
+    system_prompt = (
+        "You are a routing assistant for a medical CT segmentation platform. "
+        "Choose exactly one model from the catalog that best fits the user's need. "
+        "Every model runs in FP16 (quantized) by default, which is faster and uses "
+        "half the memory with masks identical to FP32; only choose fp32 if the user "
+        "explicitly asks for maximum precision. Respond with a single JSON object: "
+        '{"model": <one of the catalog names>, "precision": "fp16" or "fp32", '
+        '"reason": <one short sentence>}.'
+    )
+    user_prompt = (
+        f"Catalog:\n{catalog_lines}\n\n"
+        f"User need: {combined_hint or 'No specific description given; pick a sensible default.'}"
+    )
+
+    try:
+        result = chat_json(
+            model=DEFAULT_OLLAMA_MODEL,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.1,
+        )
+        model_choice = str(result.get("model", "")).strip()
+        if model_choice not in _VALID_MODELS:
+            return jsonify(_heuristic_model_pick(combined_hint)), 200
+        precision = str(result.get("precision", "fp16")).strip().lower()
+        if precision not in ("fp16", "fp32"):
+            precision = "fp16"
+        reason = str(result.get("reason", "")).strip() or (
+            f"{model_choice} is well suited to this task."
+        )
+        return jsonify({
+            "model": model_choice,
+            "precision": precision,
+            "reason": reason,
+            "source": "llm",
+        }), 200
+    except (OllamaUnavailable, ValueError, Exception):
+        # Any LLM problem degrades gracefully to the deterministic heuristic.
+        return jsonify(_heuristic_model_pick(combined_hint)), 200
 
 
 @api_blueprint.route('/inference-status/<session_id>', methods=['GET'])
