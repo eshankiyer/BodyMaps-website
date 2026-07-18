@@ -1,6 +1,7 @@
 import os
 import uuid
 import subprocess
+import signal
 import re
 import csv
 import shlex
@@ -13,6 +14,45 @@ load_dotenv()
 
 # Only one model inference runs at a time to avoid GPU OOM
 _gpu_lock = threading.Lock()
+
+# Track the active subprocess so it can be killed
+_active_proc: 'subprocess.Popen | None' = None
+_active_proc_lock = threading.Lock()
+
+
+def cancel_all_inference():
+    """Kill the currently running inference subprocess (if any)."""
+    global _active_proc
+    with _active_proc_lock:
+        proc = _active_proc
+    if proc and proc.poll() is None:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+
+def _run_subprocess(cmd: str, **kwargs):
+    """Run a shell command, tracking it so cancel_all_inference() can kill it."""
+    global _active_proc
+    proc = subprocess.Popen(
+        cmd,
+        shell=True,
+        executable='/bin/bash',
+        start_new_session=True,
+        **kwargs,
+    )
+    with _active_proc_lock:
+        _active_proc = proc
+    ret = proc.wait()
+    with _active_proc_lock:
+        if _active_proc is proc:
+            _active_proc = None
+    if ret != 0:
+        raise subprocess.CalledProcessError(ret, cmd)
 
 def get_least_used_gpu(default_gpu=None):
     if default_gpu is None:
@@ -52,13 +92,22 @@ def _resolve_conda_activate_path():
     return ""
 
 
-def run_auto_segmentation(input_path, session_dir, model):
+def run_auto_segmentation(input_path, session_dir, model, precision="fp16"):
     """
     Dispatch to the appropriate model inference function.
     Serialized via _gpu_lock so concurrent requests queue instead of OOM-ing.
     Returns the output directory path on success, raises on failure.
     """
     with _gpu_lock:
+        # Precision applies to the GPU inference stages only. The segmentation models
+        # (ePAI, SuPreM, MedFormer, R-Super, Atlas-Net) and the OpenVAE preprocessor are
+        # torch networks that can run in FP16; ShapeKit is CPU-only shape refinement, so
+        # precision is not meaningful there and is pinned to fp32. The value is exported so
+        # the inference subprocess (which inherits this environment) can load the matching
+        # half-precision weights.
+        effective_precision = "fp32" if model == "ShapeKit" else (precision or "fp16")
+        os.environ["BODYMAPS_PRECISION"] = effective_precision
+        print(f"[INFO] Inference precision for {model}: {effective_precision}")
         if model == 'ePAI':
             conda_path = _resolve_conda_activate_path()
             return _run_epai_inference(
@@ -363,12 +412,7 @@ def _run_epai_inference(input_path: str, session_dir: str, conda_path: str, epai
         print(f"[INFO] Running ePAI command for case {case_id}")
         print(full_cmd)
         try:
-            subprocess.run(
-                full_cmd,
-                shell=True,
-                executable="/bin/bash",
-                check=True,
-            )
+            _run_subprocess(full_cmd)
         except subprocess.CalledProcessError as e:
             raise RuntimeError(
                 "ePAI inference command failed"
@@ -429,15 +473,16 @@ def _run_suprem_inference(input_path: str, session_dir: str) -> str:
         f"python -W ignore {shlex.quote(os.path.join(suprem_src, 'inference.py'))} "
         f"--data_root_path {shlex.quote(inputs_dir)} "
         f"--save_dir {shlex.quote(output_dir)} "
-        f"--resume {shlex.quote(checkpoint)} "
+        f"--checkpoint {shlex.quote(checkpoint)} "
+        f"--backbone unet "
+        f"--suprem "
         f"--store_result"
     )
 
     print(f"[INFO] Running SuPreM native inference")
     print(full_cmd)
     try:
-        subprocess.run(full_cmd, shell=True, executable="/bin/bash", check=True,
-                       cwd=suprem_src)
+        _run_subprocess(full_cmd, cwd=suprem_src)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(
             f"SuPreM inference failed\nCommand: {full_cmd}\nExit code: {e.returncode}"
@@ -496,7 +541,7 @@ def _run_openvae_inference(input_path: str, session_dir: str) -> str:
     )
     print(f"[INFO] Running OpenVAE inference\n{full_cmd}")
     try:
-        subprocess.run(full_cmd, shell=True, executable="/bin/bash", check=True, cwd=openvae_src)
+        _run_subprocess(full_cmd, cwd=openvae_src)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(
             f"OpenVAE inference failed\nCommand: {full_cmd}\nExit code: {e.returncode}"
@@ -588,10 +633,7 @@ def _run_medformer_inference(input_path: str, session_dir: str) -> str:
     )
     print(f"[INFO] Running MedFormer inference\n{full_cmd}")
     try:
-        subprocess.run(
-            full_cmd, shell=True, executable="/bin/bash", check=True, cwd=rsuper_src,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT
-        )
+        _run_subprocess(full_cmd, cwd=rsuper_src)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(
             f"MedFormer inference failed\nCommand: {full_cmd}\nExit code: {e.returncode}"
@@ -651,10 +693,7 @@ def _run_rsuper_inference(input_path: str, session_dir: str) -> str:
     )
     print(f"[INFO] Running R-Super inference\n{full_cmd}")
     try:
-        subprocess.run(
-            full_cmd, shell=True, executable="/bin/bash", check=True, cwd=rsuper_src,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT
-        )
+        _run_subprocess(full_cmd, cwd=rsuper_src)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(
             f"R-Super inference failed\nCommand: {full_cmd}\nExit code: {e.returncode}"
@@ -714,7 +753,7 @@ def _run_atlasnet_inference(input_path: str, session_dir: str, conda_path: str, 
     print(f"[INFO] Running Atlas-Net command for case {case_id}")
     print(full_cmd)
     try:
-        subprocess.run(full_cmd, shell=True, executable="/bin/bash", check=True)
+        _run_subprocess(full_cmd)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(
             f"Atlas-Net inference command failed\nCommand: {full_cmd}\nExit code: {e.returncode}"
@@ -953,7 +992,7 @@ def _run_shapekit_inference(input_dir: str, session_dir: str) -> str:
     )
     print(f"[INFO] Running ShapeKit post-processing\n{full_cmd}")
     try:
-        subprocess.run(full_cmd, shell=True, executable="/bin/bash", check=True, cwd=shapekit_src)
+        _run_subprocess(full_cmd, cwd=shapekit_src)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(
             f"ShapeKit post-processing failed\nCommand: {full_cmd}\nExit code: {e.returncode}"
