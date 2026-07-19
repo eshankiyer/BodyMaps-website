@@ -1048,6 +1048,11 @@ def run_epai_inference():
         return None
 
     session_id = _pick_text("session_id", "SESSION_ID", "sessionId") or str(uuid.uuid4())
+    # Sanitize any request-provided value before it reaches a filesystem path, so a
+    # crafted session id or filename cannot escape the sessions directory (path
+    # traversal). secure_filename leaves normal ids such as UUIDs and names such as
+    # "ct.nii.gz" unchanged.
+    session_id = secure_filename(session_id) or str(uuid.uuid4())
     model_name = _pick_text("model_name", "model", "MODEL_NAME") or "ePAI"
     # Weight precision for the GPU inference stage. "fp16" routes to the quantized
     # half-precision weights; "fp32" keeps the original full-precision checkpoints.
@@ -1055,6 +1060,8 @@ def run_epai_inference():
     if precision not in ("fp16", "fp32"):
         precision = "fp16"
     uploaded_filename = _pick_text("uploaded_filename", "output_filename", "filename")
+    if uploaded_filename:
+        uploaded_filename = secure_filename(uploaded_filename)
     input_server_path = _pick_text("INPUT_SERVER_PATH", "input_server_path", "server_path", "path")
     source_reconstruction_session_id = _pick_text("source_reconstruction_session_id")
     ct_file = (
@@ -1390,8 +1397,13 @@ def create_pull_inference_job():
         return None
 
     session_id = _pick_text("session_id", "SESSION_ID", "sessionId") or str(uuid.uuid4())
+    # Sanitize request-provided values before they reach a filesystem path (path
+    # traversal). secure_filename leaves normal UUIDs and filenames unchanged.
+    session_id = secure_filename(session_id) or str(uuid.uuid4())
     input_server_path = _pick_text("input_server_path", "INPUT_SERVER_PATH", "path")
     uploaded_filename = _pick_text("uploaded_filename", "output_filename", "filename")
+    if uploaded_filename:
+        uploaded_filename = secure_filename(uploaded_filename)
     model = _pick_text("model", "MODEL_NAME") or "ePAI"
 
     ct_file = (
